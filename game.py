@@ -27,7 +27,7 @@ MAZE_MARGIN = 60
 MAZE_MARGIN_TOP = 120
 
 # Arquivo de configurações
-CONFIG_FILE = "config.json"
+CONFIG_FILE = "gravitymaze_config.json"
 
 # Traduções
 TRANSLATIONS = {
@@ -141,6 +141,127 @@ REAL_GRAVITY = 980  # pixels/s²
 # Configurações do labirinto
 WALL_COLOR = WHITE
 WALL_THICKNESS = 10
+
+# =============================================================================
+# MODOS DE JOGO
+# =============================================================================
+
+GAME_MODES = {
+    'normal': {
+        'name_pt': 'Normal',
+        'name_en': 'Normal',
+        'timer_direction': 'up',  # Conta para cima
+        'has_lives': True,
+        'initial_lives': 5,
+        'mines_in_deadends': False,
+        'track_precision': True,  # Sistema de precisão ativo
+        'desc_pt': 'Modo clássico com sistema de precisão',
+        'desc_en': 'Classic mode with precision system'
+    },
+    'minefield': {
+        'name_pt': 'Campo Minado',
+        'name_en': 'Minefield',
+        'timer_direction': 'up',
+        'has_lives': True,
+        'initial_lives': 5,
+        'mines_everywhere': True,  # Minas em células aleatórias
+        'mine_percentage': 0.15,  # 15% das células têm minas
+        'desc_pt': 'Evite as minas invisíveis!',
+        'desc_en': 'Avoid the invisible mines!'
+    },
+    'timeattack': {
+        'name_pt': 'Contra-Relógio',
+        'name_en': 'Time Attack',
+        'timer_direction': 'down',  # Conta para baixo
+        'initial_time': 300,  # 5 minutos em segundos
+        'has_lives': True,
+        'initial_lives': 5,
+        'desc_pt': 'Complete o máximo de níveis em 5 minutos',
+        'desc_en': 'Complete as many levels as possible in 5 minutes'
+    },
+    'elimination': {
+        'name_pt': 'Eliminação',
+        'name_en': 'Elimination',
+        'timer_direction': 'down',
+        'random_time_on_level': True,  # Adiciona tempo random ao passar nível
+        'random_time_min': 30,
+        'random_time_max': 80,
+        'initial_time': 60,  # Começa com 60s
+        'has_lives': True,
+        'initial_lives': 5,
+        'desc_pt': 'O tempo diminui! Complete níveis para ganhar mais tempo',
+        'desc_en': 'Time is running out! Complete levels to gain more time'
+    }
+}
+
+
+class GameMode:
+    """Classe para gerenciar o modo de jogo atual"""
+
+    def __init__(self, mode_name='normal'):
+        self.mode_name = mode_name
+        self.config = GAME_MODES.get(mode_name, GAME_MODES['normal'])
+
+    def get_name(self, language='pt'):
+        """Retorna o nome do modo no idioma especificado"""
+        key = f'name_{language}'
+        return self.config.get(key, self.config['name_pt'])
+
+    def get_description(self, language='pt'):
+        """Retorna a descrição do modo no idioma especificado"""
+        key = f'desc_{language}'
+        return self.config.get(key, self.config['desc_pt'])
+
+    def has_timer(self):
+        """Verifica se o modo tem timer"""
+        return 'initial_time' in self.config
+
+    def get_initial_time(self):
+        """Retorna tempo inicial se houver"""
+        return self.config.get('initial_time', 0)
+
+    def should_add_random_time(self):
+        """Verifica se deve adicionar tempo aleatório ao passar nível"""
+        return self.config.get('random_time_on_level', False)
+
+    def get_random_time_range(self):
+        """Retorna range de tempo aleatório"""
+        min_time = self.config.get('random_time_min', 30)
+        max_time = self.config.get('random_time_max', 80)
+        return (min_time, max_time)
+
+    def has_lives(self):
+        """Verifica se o modo tem sistema de vidas"""
+        return self.config.get('has_lives', True)
+
+    def get_initial_lives(self):
+        """Retorna número inicial de vidas"""
+        return self.config.get('initial_lives', 3)
+
+    def has_mines_in_deadends(self):
+        """Verifica se tem minas em dead-ends"""
+        return self.config.get('mines_in_deadends', False)
+
+    def has_mines_everywhere(self):
+        """Verifica se tem minas espalhadas"""
+        return self.config.get('mines_everywhere', False)
+
+    def get_mine_percentage(self):
+        """Retorna percentagem de minas"""
+        return self.config.get('mine_percentage', 0.15)
+
+    def tracks_precision(self):
+        """Verifica se rastreia precisão"""
+        return self.config.get('track_precision', False)
+
+    def timer_counts_down(self):
+        """Verifica se timer conta para baixo"""
+        return self.config.get('timer_direction', 'up') == 'down'
+
+
+# =============================================================================
+# CLASSES DE CONFIGURAÇÃO E DADOS
+# =============================================================================
 
 class Config:
     """Gestão de configurações persistentes"""
@@ -429,6 +550,38 @@ class Ball:
         # Highlight
         pygame.draw.circle(screen, (255, 100, 100), (int(self.x) - 3, int(self.y) - 3), self.radius // 3)
 
+class Mine:
+    def __init__(self, x, y, size=3):
+        self.x = x
+        self.y = y
+        self.size = size
+        self.animation_time = random.randint(0, 60) # Start animation at a random time
+
+    def draw(self, screen):
+        self.animation_time = (self.animation_time + 1) % 60
+        
+        # Cor base da mina
+        mine_color = (40, 40, 40)
+        
+        # Desenhar corpo da mina
+        pygame.draw.circle(screen, mine_color, (int(self.x), int(self.y)), self.size)
+        
+        # Desenhar espinhos
+        for i in range(8):
+            angle = math.pi * 2 * i / 8
+            start_pos = (self.x + self.size * 0.8 * math.cos(angle), self.y + self.size * 0.8 * math.sin(angle))
+            end_pos = (self.x + self.size * 1.5 * math.cos(angle), self.y + self.size * 1.5 * math.sin(angle))
+            pygame.draw.line(screen, mine_color, start_pos, end_pos, 2)
+            
+        # Animação de piscar para perigo
+        if self.animation_time < 20:
+            # Piscar um ponto vermelho no centro
+            blink_color = RED
+            pygame.draw.circle(screen, blink_color, (int(self.x), int(self.y)), self.size // 3)
+
+    def get_rect(self):
+        return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
+
 class MazeGenerator:
     """Gerador de labirintos usando Recursive Backtracking (DFS)"""
 
@@ -564,30 +717,47 @@ class MazeGenerator:
         for row, col in mine_positions:
             center_x = col * self.cell_size + self.cell_size // 2
             center_y = row * self.cell_size + self.cell_size // 2
-            mines.append((center_x, center_y))
+            mines.append(Mine(center_x, center_y))
         return mines
 
     def place_mines_everywhere(self, percentage=0.15):
-        """Colocar minas em células aleatórias (para modo minefield)"""
+        """Colocar minas em células aleatórias (para modo minefield), garantindo espaçamento."""
         total_cells = self.rows * self.cols
         mine_count = max(1, int(total_cells * percentage))
 
-        # Criar lista de todas as posições (exceto início e fim)
-        all_positions = []
+        # Criar lista de todas as posições possíveis para minas
+        available_positions = []
         for r in range(self.rows):
             for c in range(self.cols):
-                if not (r == 0 and c == 0) and not (r == self.rows-1 and c == self.cols-1):
-                    all_positions.append((r, c))
+                # Excluir a célula inicial e final
+                if not (r == 0 and c == 0) and not (r == self.rows - 1 and c == self.cols - 1):
+                    available_positions.append((r, c))
 
-        # Selecionar posições aleatórias
-        mine_positions = random.sample(all_positions, min(mine_count, len(all_positions)))
+        random.shuffle(available_positions)
 
-        # Converter para coordenadas de pixel
         mines = []
-        for row, col in mine_positions:
-            center_x = col * self.cell_size + self.cell_size // 2
-            center_y = row * self.cell_size + self.cell_size // 2
-            mines.append((center_x, center_y))
+        occupied_cells = set()
+
+        for r, c in available_positions:
+            if len(mines) >= mine_count:
+                break
+
+            # Verificar se a célula ou suas vizinhas já estão ocupadas
+            is_valid_position = True
+            for dr in range(-1, 2):
+                for dc in range(-1, 2):
+                    if (r + dr, c + dc) in occupied_cells:
+                        is_valid_position = False
+                        break
+                if not is_valid_position:
+                    break
+            
+            if is_valid_position:
+                center_x = c * self.cell_size + self.cell_size // 2
+                center_y = r * self.cell_size + self.cell_size // 2
+                mines.append(Mine(center_x, center_y))
+                occupied_cells.add((r,c))
+
         return mines
 
     @staticmethod
@@ -636,11 +806,11 @@ class MazeGenerator:
         # Outros modos também podem ter minas se necessário
 
         # Aplicar offset da margem às minas
-        mines_with_margin = []
-        for mine_x, mine_y in mines:
-            mines_with_margin.append((mine_x + MAZE_MARGIN, mine_y + MAZE_MARGIN_TOP))
+        for mine in mines:
+            mine.x += MAZE_MARGIN
+            mine.y += MAZE_MARGIN_TOP
 
-        return walls_with_margin, mines_with_margin
+        return walls_with_margin, mines
 
 class Game:
     def __init__(self):
@@ -696,41 +866,11 @@ class Game:
 
         # Modo de jogo
         self.game_mode = 'normal'  # normal, minefield, timeattack, elimination
-        self.game_mode_config = {
-            'normal': {
-                'timer_direction': 'up',
-                'has_lives': True,
-                'initial_lives': 3,
-                'mines_in_deadends': False,
-                'track_precision': True
-            },
-            'minefield': {
-                'timer_direction': 'up',
-                'has_lives': True,
-                'initial_lives': 3,
-                'mines_everywhere': True,
-                'mine_percentage': 0.15
-            },
-            'timeattack': {
-                'timer_direction': 'down',
-                'initial_time': 300,
-                'has_lives': True,
-                'initial_lives': 3
-            },
-            'elimination': {
-                'timer_direction': 'down',
-                'random_time_on_level': True,
-                'random_time_min': 30,
-                'random_time_max': 80,
-                'initial_time': 60,
-                'has_lives': True,
-                'initial_lives': 3
-            }
-        }
+
 
         # Sistema de vidas
-        self.lives = 3
-        self.max_lives = 3
+        self.lives = 5
+        self.max_lives = 5
         self.life_lost_animation_time = 0
         self.mine_hit_animation_time = 0
 
@@ -856,10 +996,10 @@ class Game:
 
         # Menu de seleção de modos
         self.mode_select_buttons = [
-            Button(center_x, 220, button_width, button_height, "Normal", DARK_GREEN),
-            Button(center_x, 310, button_width, button_height, "Campo Minado", RED),
-            Button(center_x, 400, button_width, button_height, "Contra-Relógio", GOLD),
-            Button(center_x, 490, button_width, button_height, "Eliminação", (255, 100, 0)),
+            Button(center_x, 180, button_width, button_height, "Normal", DARK_GREEN),
+            Button(center_x, 280, button_width, button_height, "Campo Minado", RED),
+            Button(center_x, 380, button_width, button_height, "Contra-Relógio", GOLD),
+            Button(center_x, 480, button_width, button_height, "Eliminação", (255, 100, 0)),
             Button(center_x, 580, button_width, button_height, "Voltar", GRAY),
         ]
 
@@ -937,7 +1077,7 @@ class Game:
     def init_level(self):
         """Inicializar um novo nível"""
         # Obter configuração do modo atual
-        mode_config = self.game_mode_config.get(self.game_mode, {})
+        mode_config = GAME_MODES.get(self.game_mode, {})
         mine_percentage = mode_config.get('mine_percentage', 0.15)
 
         # Gerar labirinto com minas
@@ -1116,7 +1256,7 @@ class Game:
 
             # Calcular pontuação (baseada no nível e tempo)
             # Incluir precisão se for modo normal
-            mode_config = self.game_mode_config.get(self.game_mode, {})
+            mode_config = GAME_MODES.get(self.game_mode, {})
             if mode_config.get('track_precision', False):
                 score = int(self.level * 1000 / max(0.1, level_time)) + self.precision_score
             else:
@@ -1131,6 +1271,10 @@ class Game:
                 bonus_time = random.randint(min_time, max_time)
                 self.timer += bonus_time
                 print(f"Bónus de tempo: +{bonus_time}s")
+
+            # Adicionar vida se alguma foi perdida
+            if self.lives < self.max_lives:
+                self.lives += 1
 
             # Adicionar à leaderboard com proteção contra erros
             try:
@@ -1192,7 +1336,7 @@ class Game:
         """Desenhar corações (vidas) no centro inferior"""
         heart_size = 30
         heart_spacing = 40
-        y_pos = self.world_height - 60
+        y_pos = self.world_height - 25
 
         # Calcular posição centralizada
         total_width = self.max_lives * heart_spacing - (heart_spacing - heart_size)
@@ -1228,6 +1372,11 @@ class Game:
                 (x + size//2, y_pos - size//6)
             ]
             pygame.draw.polygon(self.world_surface, heart_color, triangle_points)
+
+    def draw_mines(self):
+        """Desenhar minas no labirinto"""
+        for mine in self.mines:
+            mine.draw(self.world_surface)
 
     def draw_menu(self):
         """Desenhar menu principal"""
@@ -1370,6 +1519,9 @@ class Game:
         # Círculo interno escuro (buraco)
         pygame.draw.circle(self.world_surface, DARK_GREEN, self.goal_pos, self.goal_radius // 2)
 
+        # Desenhar minas
+        self.draw_mines()
+
         # Desenhar bola (com animação de explosão se pisar mina)
         if self.mine_hit_animation_time > 0:
             # Animação de explosão
@@ -1386,7 +1538,7 @@ class Game:
 
         # HUD
         # Timer
-        mode_config = self.game_mode_config.get(self.game_mode, {})
+        mode_config = GAME_MODES.get(self.game_mode, {})
         if mode_config.get('timer_direction') == 'down':
             timer_text = self.font.render(f"Tempo: {int(self.timer)}s", True, YELLOW if self.timer > 10 else RED)
         else:
@@ -1442,6 +1594,9 @@ class Game:
             pygame.draw.circle(self.world_surface, color, self.goal_pos, radius)
 
         pygame.draw.circle(self.world_surface, DARK_GREEN, self.goal_pos, self.goal_radius // 2)
+
+        # Desenhar minas
+        self.draw_mines()
 
         # Desenhar bola na posição pausada
         self.ball.draw(self.world_surface)
@@ -1536,22 +1691,16 @@ class Game:
         title_rect = title.get_rect(center=(self.world_width // 2, 80))
         self.world_surface.blit(title, title_rect)
 
-        # Descrições dos modos
-        mode_descriptions = {
-            0: "Sistema de precisão - evite tocar nas paredes",
-            1: "Minas invisíveis espalhadas pelo labirinto",
-            2: "Complete o máximo de níveis em 5 minutos",
-            3: "Timer decrescente - ganhe tempo ao passar níveis"
-        }
-
         # Botões com descrições
         for i, button in enumerate(self.mode_select_buttons):
             button.draw(self.world_surface, self.font)
 
             # Desenhar descrição pequena abaixo do botão (exceto no botão "Voltar")
             if i < 4:
-                desc_text = self.small_font.render(mode_descriptions[i], True, GRAY)
-                desc_rect = desc_text.get_rect(center=(self.world_width // 2, button.rect.y + button.rect.height + 15))
+                mode_name = list(GAME_MODES.keys())[i]
+                description = GAME_MODES[mode_name].get('desc_pt', '')
+                desc_text = self.small_font.render(description, True, GRAY)
+                desc_rect = desc_text.get_rect(center=(self.world_width // 2, button.rect.y + button.rect.height + 25))
                 self.world_surface.blit(desc_text, desc_rect)
 
         # Renderizar na tela
@@ -1644,8 +1793,8 @@ class Game:
         self.total_time = 0
         self.levels_completed = 0
         # Resetar vidas baseado no modo
-        mode_config = self.game_mode_config.get(self.game_mode, {})
-        self.lives = mode_config.get('initial_lives', 3)
+        mode_config = GAME_MODES.get(self.game_mode, {})
+        self.lives = mode_config.get('initial_lives', 5)
         self.max_lives = self.lives
         self.init_level()
 
@@ -1805,7 +1954,7 @@ class Game:
                 collided = self.ball.update(combined_accel_x, combined_accel_y, dt, self.walls)
 
                 # Sistema de precisão (modo normal)
-                mode_config = self.game_mode_config.get(self.game_mode, {})
+                mode_config = GAME_MODES.get(self.game_mode, {})
                 if mode_config.get('track_precision', False):
                     current_time = time.time()
                     if collided:
@@ -1820,11 +1969,11 @@ class Game:
 
                 # Verificar colisão com minas
                 if len(self.mines) > 0 and self.mine_hit_animation_time == 0:
-                    for mine_x, mine_y in self.mines[:]:  # Copiar lista para poder modificar
-                        distance = math.sqrt((self.ball.x - mine_x)**2 + (self.ball.y - mine_y)**2)
-                        if distance < BALL_RADIUS + 15:  # 15 pixels de raio da mina
+                    for mine in self.mines[:]:  # Copiar lista para poder modificar
+                        distance = math.sqrt((self.ball.x - mine.x)**2 + (self.ball.y - mine.y)**2)
+                        if distance < BALL_RADIUS + mine.size:
                             # Pisar mina!
-                            self.mines.remove((mine_x, mine_y))
+                            self.mines.remove(mine)
                             self.send_mine_command()
                             self.lives -= 1
                             self.mine_hit_animation_time = time.time()
@@ -1842,6 +1991,7 @@ class Game:
                             break
 
                 # Atualizar timer baseado no modo
+                mode_config = GAME_MODES.get(self.game_mode, {})
                 if mode_config.get('timer_direction') == 'down':
                     # Timer decrescente
                     self.timer -= dt
