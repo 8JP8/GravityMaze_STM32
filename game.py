@@ -1,6 +1,6 @@
 """
 GravityMaze - Jogo de Labirinto com Controlo por Acelerómetro ADXL345
-Autor: João Oliveira 1240369 / João Santos 1240368
+Autoria: João Oliveira 1240369 / João Santos 1240368
 Data: 19/11/2025
 """
 
@@ -16,6 +16,7 @@ import json
 import os
 from datetime import datetime
 import threading
+import numpy as np
 
 # Configurações do jogo
 DEFAULT_WIDTH = 1280
@@ -27,7 +28,7 @@ MAZE_MARGIN = 60
 MAZE_MARGIN_TOP = 120
 
 # Arquivo de configurações
-CONFIG_FILE = "gravitymaze_config.json"
+CONFIG_FILE = "config.json"
 
 # Traduções
 TRANSLATIONS = {
@@ -52,6 +53,7 @@ TRANSLATIONS = {
         'score': 'Pontuação',
         'precision': 'Precisão',
         'sensitivity': 'Sensibilidade',
+        'volume': 'Volume',
         'invert_x': 'Inverter X',
         'invert_y': 'Inverter Y',
         'swap_xy': 'Trocar X/Y',
@@ -65,10 +67,34 @@ TRANSLATIONS = {
         'timeattack_mode': 'Contra-Relógio',
         'elimination_mode': 'Eliminação',
         'select_mode': 'Selecionar Modo de Jogo',
-        'total_stats': 'Estatísticas Totais:',
+        'total_stats': 'Estatísticas Totais',
         'levels_completed': 'Níveis Completados',
         'total_time': 'Tempo Total',
         'best_time': 'Melhor Tempo',
+        'time_bonus': 'Bónus de Tempo',
+        'enter_name': 'Insira o seu nome:',
+        'save': 'Guardar',
+        'discard': 'Descartar',
+        'save_score': 'Guardar Pontuação?',
+        'filter_mode': 'Filtrar por Modo:',
+        'all_modes': 'Todos os Modos',
+        'player_profile': 'Perfil do Jogador',
+        'total_playtime': 'Tempo Total de Jogo',
+        'total_points': 'Pontos Totais',
+        'levels_by_mode': 'Níveis por Modo',
+        'points_by_mode': 'Pontos por Modo',
+        'close': 'Fechar',
+        'resume': 'Continuar',
+        'restart': 'Reiniciar',
+        'menu': 'Menu',
+        'try_again': 'Tentar Novamente',
+        'level_reached': 'Nível Alcançado',
+        'no_data': 'Sem dados disponíveis',
+        'rank': '#',
+        'name': 'Nome',
+        'date': 'Data',
+        'mode': 'Modo',
+        'save_progress': 'Guardar Progresso',
     },
     'en': {
         'title': 'GravityMaze',
@@ -91,6 +117,7 @@ TRANSLATIONS = {
         'score': 'Score',
         'precision': 'Precision',
         'sensitivity': 'Sensitivity',
+        'volume': 'Volume',
         'invert_x': 'Invert X',
         'invert_y': 'Invert Y',
         'swap_xy': 'Swap X/Y',
@@ -104,10 +131,34 @@ TRANSLATIONS = {
         'timeattack_mode': 'Time Attack',
         'elimination_mode': 'Elimination',
         'select_mode': 'Select Game Mode',
-        'total_stats': 'Total Stats:',
+        'total_stats': 'Total Stats',
         'levels_completed': 'Levels Completed',
         'total_time': 'Total Time',
         'best_time': 'Best Time',
+        'time_bonus': 'Time Bonus',
+        'enter_name': 'Enter your name:',
+        'save': 'Save',
+        'discard': 'Discard',
+        'save_score': 'Save Score?',
+        'filter_mode': 'Filter by Mode:',
+        'all_modes': 'All Modes',
+        'player_profile': 'Player Profile',
+        'total_playtime': 'Total Playtime',
+        'total_points': 'Total Points',
+        'levels_by_mode': 'Levels by Mode',
+        'points_by_mode': 'Points by Mode',
+        'close': 'Close',
+        'resume': 'Resume',
+        'restart': 'Restart',
+        'menu': 'Menu',
+        'try_again': 'Try Again',
+        'level_reached': 'Level Reached',
+        'no_data': 'No data available',
+        'rank': '#',
+        'name': 'Name',
+        'date': 'Date',
+        'mode': 'Mode',
+        'save_progress': 'Save Progress',
     }
 }
 
@@ -141,6 +192,115 @@ REAL_GRAVITY = 980  # pixels/s²
 # Configurações do labirinto
 WALL_COLOR = WHITE
 WALL_THICKNESS = 10
+
+# =============================================================================
+# Sound Generation Functions
+# =============================================================================
+
+def generate_8bit_sound(frequency, duration, sample_rate=22050):
+    """Generate a simple 8-bit style sound wave"""
+    t = np.linspace(0, duration, int(sample_rate * duration))
+    wave = np.sin(2 * np.pi * frequency * t)
+    # Convert to 8-bit style by quantizing
+    wave = np.round(wave * 127) / 127
+    # Convert to 16-bit for pygame
+    wave = np.int16(wave * 32767)
+    # Stereo
+    stereo_wave = np.repeat(wave.reshape(-1, 1), 2, axis=1)
+    return pygame.sndarray.make_sound(stereo_wave)
+
+def generate_level_complete_sound():
+    """Generate upward arpeggio for level complete - C major chord"""
+    sample_rate = 22050
+    duration = 0.1
+    notes = [523, 659, 784, 1047]  # C5, E5, G5, C6
+
+    sounds = []
+    for freq in notes:
+        t = np.linspace(0, duration, int(sample_rate * duration))
+        wave = np.sin(2 * np.pi * freq * t)
+        # Apply envelope for smooth sound
+        envelope = np.exp(-3 * t / duration)
+        wave = wave * envelope
+        # 8-bit style
+        wave = np.round(wave * 127) / 127
+        wave = np.int16(wave * 32767)
+        sounds.append(wave)
+
+    # Concatenate all notes
+    full_wave = np.concatenate(sounds)
+    stereo_wave = np.repeat(full_wave.reshape(-1, 1), 2, axis=1)
+    return pygame.sndarray.make_sound(stereo_wave)
+
+def generate_mine_hit_sound():
+    """Generate explosion sound for mine hit"""
+    sample_rate = 22050
+    duration = 0.3
+
+    t = np.linspace(0, duration, int(sample_rate * duration))
+    # Start with high frequency noise, drop to low rumble
+    freq = 800 * np.exp(-8 * t / duration) + 60
+    wave = np.sin(2 * np.pi * freq * t)
+    # Add noise for explosion effect
+    noise = np.random.uniform(-0.3, 0.3, len(t))
+    wave = wave * 0.7 + noise * 0.3
+    # Apply envelope
+    envelope = np.exp(-4 * t / duration)
+    wave = wave * envelope
+    # 8-bit style
+    wave = np.round(wave * 127) / 127
+    wave = np.int16(wave * 32767)
+
+    stereo_wave = np.repeat(wave.reshape(-1, 1), 2, axis=1)
+    return pygame.sndarray.make_sound(stereo_wave)
+
+def generate_game_over_sound():
+    """Generate dramatic descending arpeggio for game over"""
+    sample_rate = 22050
+    duration = 0.25
+    # Dramatic descending minor chord progression
+    notes = [523, 392, 349, 294, 262, 220]  # C5, G4, F4, D4, C4, A3 (descending arpeggio)
+
+    sounds = []
+    for i, freq in enumerate(notes):
+        t = np.linspace(0, duration, int(sample_rate * duration))
+        # Sine wave with slight vibrato for dramatic effect
+        vibrato = 1 + 0.02 * np.sin(2 * np.pi * 5 * t)
+        wave = np.sin(2 * np.pi * freq * vibrato * t)
+        # Strong decay envelope for dramatic effect
+        envelope = np.exp(-3 * t / duration)
+        wave = wave * envelope
+        # 8-bit style
+        wave = np.round(wave * 127) / 127
+        wave = np.int16(wave * 32767)
+        sounds.append(wave)
+
+    # Concatenate all notes
+    full_wave = np.concatenate(sounds)
+    stereo_wave = np.repeat(full_wave.reshape(-1, 1), 2, axis=1)
+    return pygame.sndarray.make_sound(stereo_wave)
+
+def generate_wall_collision_sound():
+    """Generate short impact sound for wall collisions"""
+    sample_rate = 22050
+    duration = 0.08  # Very short impact
+
+    t = np.linspace(0, duration, int(sample_rate * duration))
+    # Mix of frequencies for impact effect
+    wave = (np.sin(2 * np.pi * 200 * t) +
+            0.5 * np.sin(2 * np.pi * 150 * t) +
+            0.3 * np.random.randn(len(t)))  # Add noise for impact
+
+    # Sharp attack, quick decay
+    envelope = np.exp(-30 * t / duration)
+    wave = wave * envelope
+
+    # 8-bit style and normalize
+    wave = np.round(wave * 127) / 127
+    wave = np.int16(wave * 32767 * 0.3)  # Lower volume (30%)
+
+    stereo_wave = np.repeat(wave.reshape(-1, 1), 2, axis=1)
+    return pygame.sndarray.make_sound(stereo_wave)
 
 # =============================================================================
 # MODOS DE JOGO
@@ -189,8 +349,8 @@ GAME_MODES = {
         'initial_time': 60,  # Começa com 60s
         'has_lives': True,
         'initial_lives': 5,
-        'desc_pt': 'O tempo diminui! Complete níveis para ganhar mais tempo',
-        'desc_en': 'Time is running out! Complete levels to gain more time'
+        'desc_pt': 'Complete níveis para ganhar mais tempo',
+        'desc_en': 'Complete levels to gain more time'
     }
 }
 
@@ -272,7 +432,8 @@ class Config:
             'invert_x': True,
             'invert_y': True,
             'swap_xy': False,
-            'language': 'pt'
+            'language': 'pt',
+            'game_volume': 0.7
         }
         self.config = self.load()
 
@@ -322,6 +483,30 @@ class Database:
                 game_mode TEXT DEFAULT 'normal'
             )
         ''')
+
+        # Migrate old database - add game_mode column if it doesn't exist
+        try:
+            cursor.execute("SELECT game_mode FROM leaderboard LIMIT 1")
+        except sqlite3.OperationalError:
+            print("Migrando base de dados antiga - adicionando coluna game_mode...")
+            cursor.execute("ALTER TABLE leaderboard ADD COLUMN game_mode TEXT DEFAULT 'normal'")
+            self.conn.commit()
+
+        # Create player_stats table for player profiles
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS player_stats (
+                player_name TEXT PRIMARY KEY,
+                total_playtime REAL DEFAULT 0,
+                levels_normal INTEGER DEFAULT 0,
+                levels_minefield INTEGER DEFAULT 0,
+                levels_timeattack INTEGER DEFAULT 0,
+                levels_elimination INTEGER DEFAULT 0,
+                points_normal INTEGER DEFAULT 0,
+                points_minefield INTEGER DEFAULT 0,
+                points_timeattack INTEGER DEFAULT 0,
+                points_elimination INTEGER DEFAULT 0
+            )
+        ''')
         self.conn.commit()
 
     def add_score(self, player_name, level, time_taken, score, game_mode='normal'):
@@ -331,13 +516,69 @@ class Database:
             INSERT INTO leaderboard (player_name, level, time, score, date, game_mode)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (player_name, level, time_taken, score, date, game_mode))
+
+        # Update player stats
+        self.update_player_stats(player_name, level, time_taken, score, game_mode)
+
         self.conn.commit()
+
+    def update_player_stats(self, player_name, level, time_taken, score, game_mode='normal'):
+        """Update player statistics in player_stats table"""
+        cursor = self.conn.cursor()
+
+        # Check if player exists
+        cursor.execute('SELECT player_name FROM player_stats WHERE player_name = ?', (player_name,))
+        exists = cursor.fetchone()
+
+        if not exists:
+            # Create new player entry
+            cursor.execute('''
+                INSERT INTO player_stats (player_name, total_playtime)
+                VALUES (?, ?)
+            ''', (player_name, time_taken))
+        else:
+            # Update playtime
+            cursor.execute('''
+                UPDATE player_stats
+                SET total_playtime = total_playtime + ?
+                WHERE player_name = ?
+            ''', (time_taken, player_name))
+
+        # Update level count for specific mode
+        levels_col = f'levels_{game_mode}'
+        cursor.execute(f'''
+            UPDATE player_stats
+            SET {levels_col} = {levels_col} + 1
+            WHERE player_name = ?
+        ''', (player_name,))
+
+        # Update points for specific mode
+        points_col = f'points_{game_mode}'
+        cursor.execute(f'''
+            UPDATE player_stats
+            SET {points_col} = {points_col} + ?
+            WHERE player_name = ?
+        ''', (score, player_name))
+
+        self.conn.commit()
+
+    def get_player_stats(self, player_name):
+        """Get statistics for a specific player"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT total_playtime,
+                   levels_normal, levels_minefield, levels_timeattack, levels_elimination,
+                   points_normal, points_minefield, points_timeattack, points_elimination
+            FROM player_stats
+            WHERE player_name = ?
+        ''', (player_name,))
+        return cursor.fetchone()
 
     def get_top_scores(self, limit=10, game_mode=None):
         cursor = self.conn.cursor()
         if game_mode:
             cursor.execute('''
-                SELECT player_name, level, time, score, date
+                SELECT player_name, level, time, score, date, game_mode
                 FROM leaderboard
                 WHERE game_mode = ?
                 ORDER BY score DESC, time ASC
@@ -345,7 +586,7 @@ class Database:
             ''', (game_mode, limit))
         else:
             cursor.execute('''
-                SELECT player_name, level, time, score, date
+                SELECT player_name, level, time, score, date, game_mode
                 FROM leaderboard
                 ORDER BY score DESC, time ASC
                 LIMIT ?
@@ -432,6 +673,117 @@ class Slider:
                 mouse_x = event.pos[0]
                 relative_x = max(0, min(self.rect.width, mouse_x - self.rect.x))
                 self.value = self.min_val + (relative_x / self.rect.width) * (self.max_val - self.min_val)
+
+class ModeCard:
+    """Card for game mode selection"""
+    def __init__(self, x, y, width, height, mode_name, title, description, color):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.mode_name = mode_name
+        self.title = title
+        self.description = description
+        self.color = color
+        self.hover_color = LIGHT_GRAY
+        self.is_hovered = False
+
+    def draw(self, screen, title_font, desc_font):
+        color = self.hover_color if self.is_hovered else self.color
+
+        # Draw card background with shadow
+        if not self.is_hovered:
+            shadow_rect = self.rect.copy()
+            shadow_rect.x += 3
+            shadow_rect.y += 3
+            pygame.draw.rect(screen, DARK_GRAY, shadow_rect)
+
+        pygame.draw.rect(screen, color, self.rect)
+        pygame.draw.rect(screen, WHITE, self.rect, 2)
+
+        # Draw title
+        title_surface = title_font.render(self.title, True, WHITE)
+        title_rect = title_surface.get_rect(center=(self.rect.centerx, self.rect.y + 40))
+        screen.blit(title_surface, title_rect)
+
+        # Draw description (wrap text if needed)
+        desc_lines = self.wrap_text(self.description, desc_font, self.rect.width - 20)
+        y_offset = self.rect.y + 80
+        for line in desc_lines:
+            desc_surface = desc_font.render(line, True, WHITE)
+            desc_rect = desc_surface.get_rect(center=(self.rect.centerx, y_offset))
+            screen.blit(desc_surface, desc_rect)
+            y_offset += 25
+
+    def wrap_text(self, text, font, max_width):
+        """Wrap text to fit within max_width"""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            test_surface = font.render(test_line, True, WHITE)
+            if test_surface.get_width() <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        return lines
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self.is_hovered = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if self.is_hovered:
+                return True
+        return False
+
+class TextInput:
+    """Simple text input field"""
+    def __init__(self, x, y, width, height, max_length=15):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = ""
+        self.max_length = max_length
+        self.active = True
+        self.cursor_visible = True
+        self.cursor_timer = 0
+
+    def draw(self, screen, font):
+        # Draw input box
+        pygame.draw.rect(screen, WHITE, self.rect, 2)
+        pygame.draw.rect(screen, DARK_GRAY, self.rect)
+
+        # Draw text
+        text_surface = font.render(self.text, True, WHITE)
+        text_rect = text_surface.get_rect(midleft=(self.rect.x + 10, self.rect.centery))
+        screen.blit(text_surface, text_rect)
+
+        # Draw cursor (blinking)
+        if self.active:
+            self.cursor_timer += 1
+            if self.cursor_timer > 30:
+                self.cursor_visible = not self.cursor_visible
+                self.cursor_timer = 0
+
+            if self.cursor_visible:
+                cursor_x = text_rect.right + 2
+                cursor_y1 = self.rect.centery - 10
+                cursor_y2 = self.rect.centery + 10
+                pygame.draw.line(screen, WHITE, (cursor_x, cursor_y1), (cursor_x, cursor_y2), 2)
+
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif event.key == pygame.K_RETURN:
+                return 'submit'
+            elif len(self.text) < self.max_length:
+                if event.unicode.isprintable():
+                    self.text += event.unicode
+        return None
 
 class Ball:
     def __init__(self, x, y, sensitivity=1.0, world_width=DEFAULT_WIDTH, world_height=DEFAULT_HEIGHT):
@@ -815,6 +1167,7 @@ class MazeGenerator:
 class Game:
     def __init__(self):
         pygame.init()
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
 
         # Dimensões da janela (redimensionável)
         self.window_width = DEFAULT_WIDTH
@@ -824,6 +1177,23 @@ class Game:
             pygame.RESIZABLE
         )
         pygame.display.set_caption("GravityMaze - Controlo ADXL345")
+
+        # Set window icon if available
+        try:
+            icon_path = None
+            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                # Running in a PyInstaller bundle
+                icon_path = os.path.join(sys._MEIPASS, 'icon.ico')
+            else:
+                # Running as a script
+                icon_path = 'icon.ico'
+
+            if icon_path and os.path.exists(icon_path):
+                icon = pygame.image.load(icon_path)
+                pygame.display.set_icon(icon)
+        except Exception as e:
+            print(f"Could not load icon: {e}")
+
         self.clock = pygame.time.Clock()
 
         # Dimensões virtuais do mundo do jogo (fixas)
@@ -840,6 +1210,28 @@ class Game:
 
         # Configurações persistentes
         self.config = Config()
+
+        # Volume control (0.0 to 1.0)
+        self.game_volume = self.config.get('game_volume')
+
+        # Generate game sounds
+        try:
+            self.sound_level_complete = generate_level_complete_sound()
+            self.sound_mine_hit = generate_mine_hit_sound()
+            self.sound_game_over = generate_game_over_sound()
+            self.sound_wall_collision = generate_wall_collision_sound()
+
+            # Set initial volumes
+            self.sound_level_complete.set_volume(self.game_volume)
+            self.sound_mine_hit.set_volume(self.game_volume)
+            self.sound_game_over.set_volume(self.game_volume)
+            self.sound_wall_collision.set_volume(self.game_volume * 0.3)  # Wall collision is quieter
+        except Exception as e:
+            print(f"Warning: Could not generate sounds: {e}")
+            self.sound_level_complete = None
+            self.sound_mine_hit = None
+            self.sound_game_over = None
+            self.sound_wall_collision = None
 
         # Base de dados
         self.db = Database()
@@ -884,11 +1276,16 @@ class Game:
         self.mines = []
 
         # Estado do jogo
-        self.state = "MENU"  # MENU, SETTINGS, PLAYING, PAUSED, WIN, LEADERBOARD, MODE_SELECT
+        self.state = "MENU"  # MENU, SETTINGS, PLAYING, PAUSED, WIN, LEADERBOARD, MODE_SELECT, NAME_INPUT, GAME_OVER, PLAYER_PROFILE
         self.running = True
+        self.pending_score_data = None  # Store score data until name is entered
+        self.selected_player_name = None  # For player profile view
         self.level = 1
         self.timer = 0
         self.player_name = "Player"
+
+        # Leaderboard filter
+        self.leaderboard_filter = None  # None = all modes
 
         # Estatísticas
         self.total_time = 0
@@ -960,20 +1357,28 @@ class Game:
         button_height = 70
         center_x = self.world_width // 2 - button_width // 2
 
-        # Menu principal
+        # Menu principal (will use translations when drawing)
         self.main_menu_buttons = [
-            Button(center_x, 300, button_width, button_height, "Jogar", DARK_GREEN),
-            Button(center_x, 390, button_width, button_height, "Definições", GRAY),
-            Button(center_x, 480, button_width, button_height, "Leaderboard", BLUE),
-            Button(center_x, 570, button_width, button_height, "Sair", RED),
+            Button(center_x, 300, button_width, button_height, t('play', self.language), DARK_GREEN),
+            Button(center_x, 390, button_width, button_height, t('settings', self.language), GRAY),
+            Button(center_x, 480, button_width, button_height, t('leaderboard', self.language), BLUE),
+            Button(center_x, 570, button_width, button_height, t('exit', self.language), RED),
         ]
 
         # Menu de definições
         self.settings_buttons = [
-            Button(center_x, 600, button_width, button_height, "Voltar", GRAY),
+            Button(center_x, 600, button_width, button_height, t('back', self.language), GRAY),
         ]
 
+        # Language toggle button in settings - small, centered below title
+        lang_button_width = 80
+        lang_button_height = 40
+        self.language_button = Button(self.world_width // 2 - lang_button_width // 2, 90,
+                                       lang_button_width, lang_button_height,
+                                       "PT" if self.language == 'pt' else "EN", BLUE)
+
         # Sliders de configuração
+        self.volume_slider = Slider(center_x, 180, button_width, 0.0, 1.0, self.game_volume, "Volume")
         self.sensitivity_slider = Slider(center_x, 280, button_width, 0.1, 2.0, self.sensitivity, "Sensibilidade")
 
         # Menu de pausa
@@ -983,30 +1388,76 @@ class Game:
             Button(center_x, 460, button_width, button_height, "Menu Principal", GRAY),
         ]
 
-        # Menu de vitória
+        # Menu de vitória (lowered by 60px)
         self.win_menu_buttons = [
-            Button(center_x, 480, button_width, button_height, "Próximo Nível", DARK_GREEN),
-            Button(center_x, 570, button_width, button_height, "Menu Principal", GRAY),
+            Button(center_x, 540, button_width, button_height, "Próximo Nível", DARK_GREEN),
+            Button(center_x, 630, button_width, button_height, "Menu Principal", GRAY),
         ]
 
-        # Leaderboard
+        # Leaderboard with filter buttons
+        filter_button_width = 180
+        filter_button_height = 40
+        filter_y = 80
+        filter_spacing = 10
+        total_filter_width = filter_button_width * 5 + filter_spacing * 4
+        filter_start_x = (self.world_width - total_filter_width) // 2
+
+        self.leaderboard_filter_buttons = [
+            Button(filter_start_x, filter_y, filter_button_width, filter_button_height, "Todos", BLUE),
+            Button(filter_start_x + (filter_button_width + filter_spacing), filter_y, filter_button_width, filter_button_height, "Normal", DARK_GREEN),
+            Button(filter_start_x + (filter_button_width + filter_spacing) * 2, filter_y, filter_button_width, filter_button_height, "Minefield", RED),
+            Button(filter_start_x + (filter_button_width + filter_spacing) * 3, filter_y, filter_button_width, filter_button_height, "Time Attack", GOLD),
+            Button(filter_start_x + (filter_button_width + filter_spacing) * 4, filter_y, filter_button_width, filter_button_height, "Elimination", (255, 100, 0)),
+        ]
+
         self.leaderboard_buttons = [
             Button(center_x, 630, button_width, button_height, "Voltar", GRAY),
         ]
 
-        # Menu de seleção de modos
-        self.mode_select_buttons = [
-            Button(center_x, 180, button_width, button_height, "Normal", DARK_GREEN),
-            Button(center_x, 280, button_width, button_height, "Campo Minado", RED),
-            Button(center_x, 380, button_width, button_height, "Contra-Relógio", GOLD),
-            Button(center_x, 480, button_width, button_height, "Eliminação", (255, 100, 0)),
-            Button(center_x, 580, button_width, button_height, "Voltar", GRAY),
+        # Menu de seleção de modos - usar cards verticais
+        card_width = 600
+        card_height = 105
+        card_x = self.world_width // 2 - card_width // 2
+        start_y = 100
+        card_spacing = 8
+
+        self.mode_cards = [
+            ModeCard(card_x, start_y, card_width, card_height,
+                    'normal', 'Normal',
+                    GAME_MODES['normal']['desc_pt'], DARK_GREEN),
+            ModeCard(card_x, start_y + card_height + card_spacing, card_width, card_height,
+                    'minefield', 'Campo Minado',
+                    GAME_MODES['minefield']['desc_pt'], RED),
+            ModeCard(card_x, start_y + (card_height + card_spacing) * 2, card_width, card_height,
+                    'timeattack', 'Contra-Relógio',
+                    GAME_MODES['timeattack']['desc_pt'], GOLD),
+            ModeCard(card_x, start_y + (card_height + card_spacing) * 3, card_width, card_height,
+                    'elimination', 'Eliminação',
+                    GAME_MODES['elimination']['desc_pt'], (255, 100, 0)),
         ]
+
+        # Botão voltar abaixo dos cards
+        self.mode_select_back_button = Button(center_x, start_y + (card_height + card_spacing) * 4 + 20,
+                                               button_width, button_height, "Voltar", GRAY)
 
         # Menu de Game Over
         self.gameover_buttons = [
             Button(center_x, 400, button_width, button_height, "Tentar Novamente", DARK_GREEN),
             Button(center_x, 490, button_width, button_height, "Menu Principal", GRAY),
+        ]
+
+        # Name input dialog
+        input_width = 400
+        input_height = 50
+        self.name_input = TextInput(self.world_width // 2 - input_width // 2, 320, input_width, input_height)
+
+        # Center-aligned buttons with spacing - match textbox width
+        button_spacing = 20
+        button_width_each = (input_width - button_spacing) // 2  # 190px each to match 400px textbox
+        buttons_start_x = center_x - input_width // 2
+        self.name_input_buttons = [
+            Button(buttons_start_x, 420, button_width_each, button_height, "Guardar", DARK_GREEN),
+            Button(buttons_start_x + button_width_each + button_spacing, 420, button_width_each, button_height, "Descartar", GRAY),
         ]
 
     def connect_serial(self):
@@ -1096,7 +1547,7 @@ class Game:
 
         # Objetivo como círculo/buraco verde (com margem segura e longe de paredes)
         self.goal_radius = 30
-        self.goal_pos = (self.world_width - MAZE_MARGIN - 80, self.world_height - MAZE_MARGIN - 80)
+        self.goal_pos = (self.world_width - MAZE_MARGIN - 75, self.world_height - MAZE_MARGIN - 95)
 
         # Resetar variáveis do nível
         self.timer = 0
@@ -1265,27 +1716,35 @@ class Game:
             self.current_time = level_time
 
             # Adicionar tempo aleatório no modo eliminação
+            self.last_bonus_time = 0
             if mode_config.get('random_time_on_level', False):
                 min_time = mode_config.get('random_time_min', 30)
                 max_time = mode_config.get('random_time_max', 80)
                 bonus_time = random.randint(min_time, max_time)
                 self.timer += bonus_time
+                self.last_bonus_time = bonus_time
                 print(f"Bónus de tempo: +{bonus_time}s")
 
             # Adicionar vida se alguma foi perdida
             if self.lives < self.max_lives:
                 self.lives += 1
 
-            # Adicionar à leaderboard com proteção contra erros
-            try:
-                self.db.add_score(self.player_name, self.level, level_time, score, self.game_mode)
-            except Exception as e:
-                print(f"Erro ao salvar pontuação: {e}")
+            # Store data for name input (don't save yet)
+            self.pending_score_data = {
+                'level': self.level,
+                'time': level_time,
+                'score': score,
+                'game_mode': self.game_mode
+            }
 
             # Avançar nível
             self.level += 1
 
-            # Mudar estado por último
+            # Play level complete sound
+            if self.sound_level_complete:
+                self.sound_level_complete.play()
+
+            # Go to WIN screen (name input only happens when going to menu)
             self.state = "WIN"
 
     def draw_direction_indicator(self):
@@ -1382,18 +1841,23 @@ class Game:
         """Desenhar menu principal"""
         self.world_surface.fill(BLACK)
 
+        # Update button texts
+        button_keys = ['play', 'settings', 'leaderboard', 'exit']
+        for i, button in enumerate(self.main_menu_buttons):
+            button.text = t(button_keys[i], self.language)
+
         # Título com efeito
-        title = self.title_font.render("GravityMaze", True, GREEN)
+        title = self.title_font.render(t('title', self.language), True, GREEN)
         title_rect = title.get_rect(center=(self.world_width // 2, 150))
 
         # Sombra do título
-        shadow = self.title_font.render("GravityMaze", True, DARK_GREEN)
+        shadow = self.title_font.render(t('title', self.language), True, DARK_GREEN)
         shadow_rect = shadow.get_rect(center=(self.world_width // 2 + 5, 156))
         self.world_surface.blit(shadow, shadow_rect)
         self.world_surface.blit(title, title_rect)
 
         # Subtítulo
-        subtitle = self.small_font.render("Controlo por Aceler\u00f3metro ADXL345", True, GRAY)
+        subtitle = self.small_font.render(t('subtitle', self.language), True, GRAY)
         subtitle_rect = subtitle.get_rect(center=(self.world_width // 2, 220))
         self.world_surface.blit(subtitle, subtitle_rect)
 
@@ -1409,32 +1873,56 @@ class Game:
         """Desenhar menu de definições"""
         self.world_surface.fill(BLACK)
 
+        # Update button texts
+        self.settings_buttons[0].text = t('back', self.language)
+
         # Título
-        title = self.font.render("Defini\u00e7\u00f5es", True, WHITE)
-        title_rect = title.get_rect(center=(self.world_width // 2, 80))
+        title = self.font.render(t('settings', self.language), True, WHITE)
+        title_rect = title.get_rect(center=(self.world_width // 2, 50))
         self.world_surface.blit(title, title_rect)
 
+        # Language selector as clickable text (below title, before sliders)
+        lang_text = f"{t('language', self.language)}: {'PT' if self.language == 'pt' else 'EN'}"
+        lang_surface = self.small_font.render(lang_text, True, WHITE)
+        lang_rect = lang_surface.get_rect(center=(self.world_width // 2, 120))
+        self.world_surface.blit(lang_surface, lang_rect)
+        # Store rect for click detection
+        self.language_text_rect = lang_rect
+
+        # Volume slider
+        self.volume_slider.label = t('volume', self.language)
+        self.volume_slider.draw(self.world_surface, self.small_font)
+
         # Slider de sensibilidade
+        self.sensitivity_slider.label = t('sensitivity', self.language)
         self.sensitivity_slider.draw(self.world_surface, self.small_font)
 
         # Opções de inversão
-        invert_x_text = f"Inverter X: {'SIM' if self.invert_x else 'N\u00c3O'}"
-        invert_y_text = f"Inverter Y: {'SIM' if self.invert_y else 'N\u00c3O'}"
-        swap_xy_text = f"Trocar X/Y: {'SIM' if self.swap_xy else 'N\u00c3O'}"
+        yes_no = t('yes', self.language) if self.invert_x else t('no', self.language)
+        invert_x_text = f"{t('invert_x', self.language)}: {yes_no}"
+        yes_no = t('yes', self.language) if self.invert_y else t('no', self.language)
+        invert_y_text = f"{t('invert_y', self.language)}: {yes_no}"
+        yes_no = t('yes', self.language) if self.swap_xy else t('no', self.language)
+        swap_xy_text = f"{t('swap_xy', self.language)}: {yes_no}"
 
         text_x = self.small_font.render(invert_x_text, True, WHITE)
         text_y = self.small_font.render(invert_y_text, True, WHITE)
         text_swap = self.small_font.render(swap_xy_text, True, WHITE)
 
-        self.world_surface.blit(text_x, (self.world_width // 2 - 150, 360))
-        self.world_surface.blit(text_y, (self.world_width // 2 - 150, 410))
-        self.world_surface.blit(text_swap, (self.world_width // 2 - 150, 460))
+        # Center-align the text blocks
+        text_x_rect = text_x.get_rect(center=(self.world_width // 2, 360))
+        text_y_rect = text_y.get_rect(center=(self.world_width // 2, 410))
+        text_swap_rect = text_swap.get_rect(center=(self.world_width // 2, 460))
+
+        self.world_surface.blit(text_x, text_x_rect)
+        self.world_surface.blit(text_y, text_y_rect)
+        self.world_surface.blit(text_swap, text_swap_rect)
 
         # Info de conexão serial
-        connection_text = "Serial: CONECTADO" if self.serial_connected else "Serial: DESCONECTADO (a usar teclado)"
+        connection_text = t('serial_connected', self.language) if self.serial_connected else t('serial_disconnected', self.language)
         conn_color = GREEN if self.serial_connected else RED
         conn_surface = self.small_font.render(connection_text, True, conn_color)
-        conn_rect = conn_surface.get_rect(center=(self.world_width // 2, 520))
+        conn_rect = conn_surface.get_rect(center=(self.world_width // 2, 570))
         self.world_surface.blit(conn_surface, conn_rect)
 
         # Botões
@@ -1446,18 +1934,70 @@ class Game:
         pygame.display.flip()
 
     def draw_leaderboard(self):
-        """Desenhar leaderboard"""
+        """Desenhar leaderboard com filtro de modo"""
         self.world_surface.fill(BLACK)
 
+        # Update button texts
+        self.leaderboard_buttons[0].text = t('back', self.language)
+
         # Título
-        title = self.font.render("Leaderboard", True, GOLD)
-        title_rect = title.get_rect(center=(self.world_width // 2, 50))
+        title = self.font.render(t('leaderboard', self.language), True, GOLD)
+        title_rect = title.get_rect(center=(self.world_width // 2, 40))
         self.world_surface.blit(title, title_rect)
 
-        # Cabeçalho
-        headers = ["#", "Nome", "N\u00edvel", "Tempo", "Pontua\u00e7\u00e3o", "Data"]
-        y_offset = 110
-        x_positions = [50, 120, 280, 370, 480, 620]
+        # Filter buttons with colored outline for selection
+        for i, button in enumerate(self.leaderboard_filter_buttons):
+            # Update button text based on language
+            button_texts = [
+                t('all_modes', self.language),
+                t('normal_mode', self.language),
+                t('minefield_mode', self.language),
+                t('timeattack_mode', self.language),
+                t('elimination_mode', self.language)
+            ]
+            button.text = button_texts[i]
+
+            # Draw button
+            button.draw(self.world_surface, self.small_font)
+
+            # Highlight selected filter with colored outline
+            filter_mode = None if i == 0 else ['normal', 'minefield', 'timeattack', 'elimination'][i-1]
+            if filter_mode == self.leaderboard_filter:
+                # Draw thick outline in button's color
+                outline_rect = pygame.Rect(button.rect.x - 4, button.rect.y - 4,
+                                          button.rect.width + 8, button.rect.height + 8)
+                pygame.draw.rect(self.world_surface, button.color, outline_rect, 4)
+
+        # Cabeçalho - conditional based on filter
+        show_mode = self.leaderboard_filter is None  # Show mode column when "All Modes" is selected
+
+        if show_mode:
+            # Order: #, Name, Date, Level, Time, Score, Mode
+            headers = [
+                t('rank', self.language),
+                t('name', self.language),
+                t('date', self.language),
+                t('level', self.language),
+                t('time', self.language),
+                t('score', self.language),
+                t('mode', self.language)
+            ]
+            # Column widths: # (50), Name (150), Date (150), Level (70), Time (90), Score (150), Mode (200)
+            x_positions = [35, 90, 250, 410, 490, 590, 750]
+        else:
+            # Order: #, Name, Date, Level, Time, Score
+            headers = [
+                t('rank', self.language),
+                t('name', self.language),
+                t('date', self.language),
+                t('level', self.language),
+                t('time', self.language),
+                t('score', self.language)
+            ]
+            # Column widths: # (50), Name (150), Date (150), Level (70), Time (90), Score (150)
+            x_positions = [35, 90, 250, 410, 490, 590]
+
+        y_offset = 135
 
         for i, header in enumerate(headers):
             text = self.small_font.render(header, True, GRAY)
@@ -1466,26 +2006,65 @@ class Game:
         # Linha separadora
         pygame.draw.line(self.world_surface, GRAY, (40, y_offset + 30), (self.world_width - 40, y_offset + 30), 2)
 
-        # Scores
-        scores = self.db.get_top_scores(10)
-        y_offset = 150
+        # Scores - with filter (store rects for clickability)
+        scores = self.db.get_top_scores(10, self.leaderboard_filter)
+        y_offset = 175
+        self.leaderboard_entry_rects = []  # Store entry positions for click detection
 
-        for i, (name, level, time_taken, score, date) in enumerate(scores):
+        for i, score_data in enumerate(scores):
+            # Unpack data - now includes game_mode
+            name, level, time_taken, score, date, game_mode = score_data
             color = GOLD if i == 0 else (LIGHT_GRAY if i == 1 else (GRAY if i == 2 else WHITE))
 
+            # Create clickable rect for this entry
+            entry_rect = pygame.Rect(40, y_offset - 5, self.world_width - 80, 30)
+            self.leaderboard_entry_rects.append((entry_rect, name))
+
+            # Highlight on hover (will be handled in event handler)
+            # Draw hover background if mouse is over
+            mouse_pos = pygame.mouse.get_pos()
+            # Convert to world coordinates
+            scale, offset_x, offset_y = self.get_scale_and_offset()
+            world_mouse_x = (mouse_pos[0] - offset_x) / scale
+            world_mouse_y = (mouse_pos[1] - offset_y) / scale
+            if entry_rect.collidepoint(world_mouse_x, world_mouse_y):
+                pygame.draw.rect(self.world_surface, (40, 40, 40), entry_rect)
+
+            # Render each field with overflow handling
             rank = self.small_font.render(str(i + 1), True, color)
-            name_text = self.small_font.render(name[:10], True, color)
+            # Limit name to 12 characters for overflow
+            name_text = self.small_font.render(name[:12], True, color)
             level_text = self.small_font.render(str(level), True, color)
             time_text = self.small_font.render(f"{time_taken:.2f}s", True, color)
             score_text = self.small_font.render(str(score), True, color)
+            # Date format: MM-DD HH:MM
             date_text = self.small_font.render(date[5:16], True, color)
 
-            self.world_surface.blit(rank, (x_positions[0], y_offset))
-            self.world_surface.blit(name_text, (x_positions[1], y_offset))
-            self.world_surface.blit(level_text, (x_positions[2], y_offset))
-            self.world_surface.blit(time_text, (x_positions[3], y_offset))
-            self.world_surface.blit(score_text, (x_positions[4], y_offset))
-            self.world_surface.blit(date_text, (x_positions[5], y_offset))
+            if show_mode:
+                # Translate game mode name and limit to fit
+                mode_key = f"{game_mode}_mode"
+                mode_name = t(mode_key, self.language)
+                # Limit mode name to fit the wider column
+                if len(mode_name) > 20:
+                    mode_name = mode_name[:17] + "..."
+                mode_text = self.small_font.render(mode_name, True, color)
+
+                # Order: #, Name, Date, Level, Time, Score, Mode
+                self.world_surface.blit(rank, (x_positions[0], y_offset))
+                self.world_surface.blit(name_text, (x_positions[1], y_offset))
+                self.world_surface.blit(date_text, (x_positions[2], y_offset))
+                self.world_surface.blit(level_text, (x_positions[3], y_offset))
+                self.world_surface.blit(time_text, (x_positions[4], y_offset))
+                self.world_surface.blit(score_text, (x_positions[5], y_offset))
+                self.world_surface.blit(mode_text, (x_positions[6], y_offset))
+            else:
+                # Order: #, Name, Date, Level, Time, Score
+                self.world_surface.blit(rank, (x_positions[0], y_offset))
+                self.world_surface.blit(name_text, (x_positions[1], y_offset))
+                self.world_surface.blit(date_text, (x_positions[2], y_offset))
+                self.world_surface.blit(level_text, (x_positions[3], y_offset))
+                self.world_surface.blit(time_text, (x_positions[4], y_offset))
+                self.world_surface.blit(score_text, (x_positions[5], y_offset))
 
             y_offset += 35
 
@@ -1540,17 +2119,18 @@ class Game:
         # Timer
         mode_config = GAME_MODES.get(self.game_mode, {})
         if mode_config.get('timer_direction') == 'down':
-            timer_text = self.font.render(f"Tempo: {int(self.timer)}s", True, YELLOW if self.timer > 10 else RED)
+            timer_text = self.font.render(f"{t('time', self.language)}: {self.timer:.1f}s", True, YELLOW if self.timer > 10 else RED)
         else:
-            timer_text = self.font.render(f"Tempo: {self.timer:.1f}s", True, YELLOW)
+            timer_text = self.font.render(f"{t('time', self.language)}: {self.timer:.1f}s", True, YELLOW)
         self.world_surface.blit(timer_text, (10, 10))
 
         # Nível
-        level_text = self.font.render(f"Nível: {self.level}", True, WHITE)
+        level_text = self.font.render(f"{t('level', self.language)}: {self.level}", True, WHITE)
         self.world_surface.blit(level_text, (self.world_width - 150, 10))
 
-        # Corações (vidas) no centro inferior
-        self.draw_hearts()
+        # Corações (vidas) no centro inferior - apenas no modo minefield
+        if self.game_mode == 'minefield':
+            self.draw_hearts()
 
         # Dados do acelerómetro + teclado (pequenos)
         combined_x = self.accel_x + self.keyboard_accel_x
@@ -1605,10 +2185,10 @@ class Game:
         self.draw_direction_indicator()
 
         # HUD
-        timer_text = self.font.render(f"Tempo: {self.timer:.1f}s", True, YELLOW)
+        timer_text = self.font.render(f"{t('time', self.language)}: {self.timer:.1f}s", True, YELLOW)
         self.world_surface.blit(timer_text, (10, 10))
 
-        level_text = self.font.render(f"N\u00edvel: {self.level}", True, WHITE)
+        level_text = self.font.render(f"{t('level', self.language)}: {self.level}", True, WHITE)
         self.world_surface.blit(level_text, (self.world_width - 150, 10))
 
         combined_x = self.accel_x + self.keyboard_accel_x
@@ -1628,8 +2208,13 @@ class Game:
         overlay.fill(BLACK)
         self.world_surface.blit(overlay, (0, 0))
 
+        # Update button texts
+        button_keys = ['resume', 'restart', 'menu']
+        for i, button in enumerate(self.pause_menu_buttons):
+            button.text = t(button_keys[i], self.language)
+
         # Título
-        title = self.font.render("PAUSADO", True, WHITE)
+        title = self.font.render(t('paused', self.language), True, WHITE)
         title_rect = title.get_rect(center=(self.world_width // 2, 150))
         self.world_surface.blit(title, title_rect)
 
@@ -1648,27 +2233,45 @@ class Game:
         """Desenhar tela de vitória com métricas"""
         self.world_surface.fill(BLACK)
 
+        # Update button texts
+        button_keys = ['next_level', 'menu']
+        for i, button in enumerate(self.win_menu_buttons):
+            button.text = t(button_keys[i], self.language)
+
         # Título
-        title = self.title_font.render("N\u00cdVEL COMPLETO!", True, GREEN)
+        title = self.title_font.render(t('level_complete', self.language), True, GREEN)
         title_rect = title.get_rect(center=(self.world_width // 2, 80))
         self.world_surface.blit(title, title_rect)
 
         # Métricas
         metrics = [
-            f"N\u00edvel: {self.level}",
-            f"Tempo: {self.current_time:.2f}s",
-            f"Pontua\u00e7\u00e3o: {self.current_score}",
-            "",
-            "Estat\u00edsticas Totais:",
-            f"N\u00edveis Completados: {self.levels_completed}",
-            f"Tempo Total: {self.total_time:.2f}s",
-            f"Melhor Tempo: {self.best_time:.2f}s",
+            f"{t('level', self.language)}: {self.level}",
+            f"{t('time', self.language)}: {self.current_time:.2f}s",
+            f"{t('score', self.language)}: {self.current_score}",
         ]
+
+        # Add time bonus for elimination mode
+        if hasattr(self, 'last_bonus_time') and self.last_bonus_time > 0:
+            metrics.append(f"{t('time_bonus', self.language)}: +{self.last_bonus_time}s")
+
+        metrics.extend([
+            "",
+            f"{t('total_stats', self.language)}:",
+            f"{t('levels_completed', self.language)}: {self.levels_completed}",
+            f"{t('total_time', self.language)}: {self.total_time:.2f}s",
+            f"{t('best_time', self.language)}: {self.best_time:.2f}s",
+        ])
 
         y_offset = 180
         for metric in metrics:
             if metric:
-                color = GOLD if "Pontua\u00e7\u00e3o" in metric else WHITE
+                # Check for score or bonus in translation-agnostic way
+                if t('score', self.language) in metric:
+                    color = GOLD
+                elif t('time_bonus', self.language) in metric:
+                    color = GREEN
+                else:
+                    color = WHITE
                 text = self.font.render(metric, True, color)
                 text_rect = text.get_rect(center=(self.world_width // 2, y_offset))
                 self.world_surface.blit(text, text_rect)
@@ -1683,25 +2286,77 @@ class Game:
         pygame.display.flip()
 
     def draw_mode_select(self):
-        """Desenhar menu de seleção de modo de jogo"""
+        """Desenhar menu de seleção de modo de jogo com cards verticais"""
         self.world_surface.fill(BLACK)
 
+        # Update button texts and card descriptions
+        self.mode_select_back_button.text = t('back', self.language)
+        mode_keys = ['normal', 'minefield', 'timeattack', 'elimination']
+        for i, card in enumerate(self.mode_cards):
+            mode_key = mode_keys[i]
+            card.title = GAME_MODES[mode_key][f'name_{self.language}']
+            card.description = GAME_MODES[mode_key][f'desc_{self.language}']
+
         # Título
-        title = self.title_font.render("Selecionar Modo", True, GREEN)
-        title_rect = title.get_rect(center=(self.world_width // 2, 80))
+        title = self.font.render(t('select_mode', self.language), True, WHITE)
+        title_rect = title.get_rect(center=(self.world_width // 2, 55))
         self.world_surface.blit(title, title_rect)
 
-        # Botões com descrições
-        for i, button in enumerate(self.mode_select_buttons):
+        # Draw mode cards
+        for card in self.mode_cards:
+            card.draw(self.world_surface, self.font, self.small_font)
+
+        # Draw back button
+        self.mode_select_back_button.draw(self.world_surface, self.font)
+
+        # Renderizar na tela
+        self.render_world_to_screen()
+        pygame.display.flip()
+
+    def draw_name_input(self):
+        """Desenhar tela de input de nome"""
+        self.world_surface.fill(BLACK)
+
+        # Update button texts
+        self.name_input_buttons[0].text = t('save', self.language)
+        self.name_input_buttons[1].text = t('discard', self.language)
+
+        # Título
+        title_text = t('save_progress', self.language)
+        title = self.title_font.render(title_text, True, GREEN)
+        title_rect = title.get_rect(center=(self.world_width // 2, 100))
+        self.world_surface.blit(title, title_rect)
+
+        # Prompt
+        prompt = self.font.render(t('enter_name', self.language), True, WHITE)
+        prompt_rect = prompt.get_rect(center=(self.world_width // 2, 250))
+        self.world_surface.blit(prompt, prompt_rect)
+
+        # Text input field
+        self.name_input.draw(self.world_surface, self.font)
+
+        # Recalculate button positions to ensure they're centered
+        # This ensures buttons are always centered even if screen size changes
+        textbox_width = 400
+        button_spacing = 20
+        button_width_each = (textbox_width - button_spacing) // 2  # 190px each
+
+        # Center the button group
+        total_button_width = button_width_each * 2 + button_spacing  # 400px total
+        buttons_start_x = (self.world_width // 2) - (total_button_width // 2)
+
+        # Update button positions
+        self.name_input_buttons[0].rect.x = buttons_start_x
+        self.name_input_buttons[1].rect.x = buttons_start_x + button_width_each + button_spacing
+
+        # Draw buttons
+        for button in self.name_input_buttons:
             button.draw(self.world_surface, self.font)
 
-            # Desenhar descrição pequena abaixo do botão (exceto no botão "Voltar")
-            if i < 4:
-                mode_name = list(GAME_MODES.keys())[i]
-                description = GAME_MODES[mode_name].get('desc_pt', '')
-                desc_text = self.small_font.render(description, True, GRAY)
-                desc_rect = desc_text.get_rect(center=(self.world_width // 2, button.rect.y + button.rect.height + 25))
-                self.world_surface.blit(desc_text, desc_rect)
+        # Info text
+        info = self.small_font.render("ENTER = " + t('save', self.language) + " | ESC = " + t('discard', self.language), True, GRAY)
+        info_rect = info.get_rect(center=(self.world_width // 2, 520))
+        self.world_surface.blit(info, info_rect)
 
         # Renderizar na tela
         self.render_world_to_screen()
@@ -1711,21 +2366,26 @@ class Game:
         """Desenhar tela de game over"""
         self.world_surface.fill(BLACK)
 
+        # Update button texts
+        button_keys = ['try_again', 'menu']
+        for i, button in enumerate(self.gameover_buttons):
+            button.text = t(button_keys[i], self.language)
+
         # Título
-        title = self.title_font.render("GAME OVER", True, RED)
+        title = self.title_font.render(t('game_over', self.language), True, RED)
         title_rect = title.get_rect(center=(self.world_width // 2, 120))
 
         # Sombra
-        shadow = self.title_font.render("GAME OVER", True, DARK_GRAY)
+        shadow = self.title_font.render(t('game_over', self.language), True, DARK_GRAY)
         shadow_rect = shadow.get_rect(center=(self.world_width // 2 + 5, 126))
         self.world_surface.blit(shadow, shadow_rect)
         self.world_surface.blit(title, title_rect)
 
         # Estatísticas
         stats = [
-            f"Nível Alcançado: {self.level}",
-            f"Níveis Completados: {self.levels_completed}",
-            f"Tempo Total: {self.total_time:.2f}s",
+            f"{t('level_reached', self.language)}: {self.level}",
+            f"{t('levels_completed', self.language)}: {self.levels_completed}",
+            f"{t('total_time', self.language)}: {self.total_time:.2f}s",
         ]
 
         y_offset = 240
@@ -1743,6 +2403,72 @@ class Game:
         self.render_world_to_screen()
         pygame.display.flip()
 
+    def draw_player_profile(self):
+        """Desenhar perfil do jogador"""
+        self.world_surface.fill(BLACK)
+
+        # Título - smaller font
+        title = self.font.render(t('player_profile', self.language), True, GREEN)
+        title_rect = title.get_rect(center=(self.world_width // 2, 50))
+        self.world_surface.blit(title, title_rect)
+
+        # Player name - larger font
+        name_text = self.title_font.render(self.selected_player_name, True, GOLD)
+        name_rect = name_text.get_rect(center=(self.world_width // 2, 130))
+        self.world_surface.blit(name_text, name_rect)
+
+        # Get player stats
+        stats = self.db.get_player_stats(self.selected_player_name)
+
+        if stats:
+            total_playtime, lvl_n, lvl_m, lvl_t, lvl_e, pts_n, pts_m, pts_t, pts_e = stats
+
+            # Display stats
+            y_offset = 200
+            info_items = [
+                f"{t('total_playtime', self.language)}: {total_playtime:.1f}s",
+                "",
+                f"{t('levels_by_mode', self.language)}:",
+                f"  {t('normal_mode', self.language)}: {lvl_n}",
+                f"  {t('minefield_mode', self.language)}: {lvl_m}",
+                f"  {t('timeattack_mode', self.language)}: {lvl_t}",
+                f"  {t('elimination_mode', self.language)}: {lvl_e}",
+                "",
+                f"{t('points_by_mode', self.language)}:",
+                f"  {t('normal_mode', self.language)}: {pts_n}",
+                f"  {t('minefield_mode', self.language)}: {pts_m}",
+                f"  {t('timeattack_mode', self.language)}: {pts_t}",
+                f"  {t('elimination_mode', self.language)}: {pts_e}",
+            ]
+
+            for item in info_items:
+                if item:
+                    text = self.small_font.render(item, True, WHITE)
+                    text_rect = text.get_rect(center=(self.world_width // 2, y_offset))
+                    self.world_surface.blit(text, text_rect)
+                y_offset += 30
+        else:
+            no_data = self.font.render(t('no_data', self.language), True, GRAY)
+            no_data_rect = no_data.get_rect(center=(self.world_width // 2, 300))
+            self.world_surface.blit(no_data, no_data_rect)
+
+        # Back button - create once if doesn't exist, update text each frame
+        if not hasattr(self, 'player_profile_back_button'):
+            self.player_profile_back_button = Button(self.world_width // 2 - 200, 600, 400, 70, t('back', self.language), GRAY)
+
+        # Update button text for language
+        self.player_profile_back_button.text = t('back', self.language)
+        self.player_profile_back_button.draw(self.world_surface, self.font)
+
+        # Renderizar na tela
+        self.render_world_to_screen()
+        pygame.display.flip()
+
+    def handle_player_profile_events(self, event):
+        """Tratar eventos do perfil do jogador"""
+        if hasattr(self, 'player_profile_back_button') and self.player_profile_back_button.handle_event(event):
+            self.state = "LEADERBOARD"
+
     def handle_menu_events(self, event):
         """Tratar eventos do menu principal"""
         for i, button in enumerate(self.main_menu_buttons):
@@ -1758,31 +2484,79 @@ class Game:
 
     def handle_mode_select_events(self, event):
         """Tratar eventos do menu de seleção de modo"""
-        for i, button in enumerate(self.mode_select_buttons):
-            if button.handle_event(event):
-                if i == 0:  # Normal
-                    self.game_mode = 'normal'
-                    self.start_game()
-                elif i == 1:  # Campo Minado
-                    self.game_mode = 'minefield'
-                    self.start_game()
-                elif i == 2:  # Contra-Relógio
-                    self.game_mode = 'timeattack'
-                    self.start_game()
-                elif i == 3:  # Eliminação
-                    self.game_mode = 'elimination'
-                    self.start_game()
-                elif i == 4:  # Voltar
-                    self.state = "MENU"
+        # Handle mode cards
+        for card in self.mode_cards:
+            if card.handle_event(event):
+                self.game_mode = card.mode_name
+                self.start_game()
+                return
+
+        # Handle back button
+        if self.mode_select_back_button.handle_event(event):
+            self.state = "MENU"
 
     def handle_gameover_events(self, event):
         """Tratar eventos do menu de game over"""
         for i, button in enumerate(self.gameover_buttons):
             if button.handle_event(event):
-                if i == 0:  # Tentar Novamente
-                    self.start_game()
-                elif i == 1:  # Menu Principal
-                    self.state = "MENU"
+                # Show name input screen if there's pending score data
+                if self.pending_score_data:
+                    self.name_input.text = self.player_name
+                    self.state = "NAME_INPUT"
+                else:
+                    # No pending data, go directly
+                    if i == 0:  # Tentar Novamente
+                        self.start_game()
+                    elif i == 1:  # Menu Principal
+                        self.state = "MENU"
+
+    def handle_name_input_events(self, event):
+        """Tratar eventos da tela de input de nome"""
+        # Handle text input
+        result = self.name_input.handle_event(event)
+
+        if result == 'submit' or (event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN):
+            # Save score
+            self.save_pending_score()
+            return
+
+        # Handle ESC to discard
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.discard_pending_score()
+            return
+
+        # Handle buttons
+        for i, button in enumerate(self.name_input_buttons):
+            if button.handle_event(event):
+                if i == 0:  # Save
+                    self.save_pending_score()
+                elif i == 1:  # Discard
+                    self.discard_pending_score()
+
+    def save_pending_score(self):
+        """Save the pending score to database"""
+        if self.pending_score_data and self.name_input.text.strip():
+            self.player_name = self.name_input.text.strip()
+            try:
+                self.db.add_score(
+                    self.player_name,
+                    self.pending_score_data['level'],
+                    self.pending_score_data['time'],
+                    self.pending_score_data['score'],
+                    self.pending_score_data['game_mode']
+                )
+            except Exception as e:
+                print(f"Erro ao salvar pontuação: {e}")
+
+        # Go to menu
+        self.pending_score_data = None
+        self.state = "MENU"
+
+    def discard_pending_score(self):
+        """Discard the pending score without saving"""
+        # Go to menu without saving
+        self.pending_score_data = None
+        self.state = "MENU"
 
     def start_game(self):
         """Iniciar jogo com modo selecionado"""
@@ -1800,6 +2574,23 @@ class Game:
 
     def handle_settings_events(self, event):
         """Tratar eventos do menu de definições"""
+        # Volume slider
+        self.volume_slider.handle_event(event)
+        old_volume = self.game_volume
+        self.game_volume = self.volume_slider.value
+        if old_volume != self.game_volume:
+            self.config.set('game_volume', self.game_volume)
+            # Update sound volumes
+            if self.sound_level_complete:
+                self.sound_level_complete.set_volume(self.game_volume)
+            if self.sound_mine_hit:
+                self.sound_mine_hit.set_volume(self.game_volume)
+            if self.sound_game_over:
+                self.sound_game_over.set_volume(self.game_volume)
+            if self.sound_wall_collision:
+                self.sound_wall_collision.set_volume(self.game_volume * 0.3)  # Keep wall collision quieter
+
+        # Sensitivity slider
         self.sensitivity_slider.handle_event(event)
         old_sensitivity = self.sensitivity
         self.sensitivity = self.sensitivity_slider.value
@@ -1810,8 +2601,12 @@ class Game:
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_pos = event.pos
+            # Language text click (Y: 260)
+            if hasattr(self, 'language_text_rect') and self.language_text_rect.collidepoint(mouse_pos):
+                self.language = 'en' if self.language == 'pt' else 'pt'
+                self.config.set('language', self.language)
             # Botão inverter X (ajustado para nova posição Y: 360)
-            if 340 < mouse_pos[1] < 390 and self.world_width // 2 - 150 < mouse_pos[0] < self.world_width // 2 + 200:
+            elif 340 < mouse_pos[1] < 390 and self.world_width // 2 - 150 < mouse_pos[0] < self.world_width // 2 + 200:
                 self.invert_x = not self.invert_x
                 self.config.set('invert_x', self.invert_x)
             # Botão inverter Y (ajustado para nova posição Y: 410)
@@ -1829,6 +2624,30 @@ class Game:
 
     def handle_leaderboard_events(self, event):
         """Tratar eventos da leaderboard"""
+        # Handle filter buttons
+        for i, button in enumerate(self.leaderboard_filter_buttons):
+            if button.handle_event(event):
+                if i == 0:
+                    self.leaderboard_filter = None  # All modes
+                elif i == 1:
+                    self.leaderboard_filter = 'normal'
+                elif i == 2:
+                    self.leaderboard_filter = 'minefield'
+                elif i == 3:
+                    self.leaderboard_filter = 'timeattack'
+                elif i == 4:
+                    self.leaderboard_filter = 'elimination'
+                return
+
+        # Handle clicks on leaderboard entries
+        if event.type == pygame.MOUSEBUTTONDOWN and hasattr(self, 'leaderboard_entry_rects'):
+            for entry_rect, player_name in self.leaderboard_entry_rects:
+                if entry_rect.collidepoint(event.pos):
+                    self.selected_player_name = player_name
+                    self.state = "PLAYER_PROFILE"
+                    return
+
+        # Handle back button
         for button in self.leaderboard_buttons:
             if button.handle_event(event):
                 self.state = "MENU"
@@ -1866,7 +2685,12 @@ class Game:
                         print(f"Erro ao iniciar próximo nível: {e}")
                         self.state = "MENU"
                 elif i == 1:  # Menu
-                    self.state = "MENU"
+                    # Only show name input if at least one level was completed
+                    if self.levels_completed > 0:
+                        self.state = "NAME_INPUT"
+                        self.name_input.text = self.player_name  # Pre-fill with current name
+                    else:
+                        self.state = "MENU"
 
     def run(self):
         """Loop principal do jogo"""
@@ -1930,10 +2754,14 @@ class Game:
                     self.handle_settings_events(event)
                 elif self.state == "LEADERBOARD":
                     self.handle_leaderboard_events(event)
+                elif self.state == "PLAYER_PROFILE":
+                    self.handle_player_profile_events(event)
                 elif self.state == "PAUSED":
                     self.handle_pause_events(event)
                 elif self.state == "WIN":
                     self.handle_win_events(event)
+                elif self.state == "NAME_INPUT":
+                    self.handle_name_input_events(event)
                 elif self.state == "GAME_OVER":
                     self.handle_gameover_events(event)
 
@@ -1952,6 +2780,10 @@ class Game:
 
                 # Atualizar bola com aceleração combinada
                 collided = self.ball.update(combined_accel_x, combined_accel_y, dt, self.walls)
+
+                # Play wall collision sound if ball hit a wall
+                if collided and self.sound_wall_collision:
+                    self.sound_wall_collision.play()
 
                 # Sistema de precisão (modo normal)
                 mode_config = GAME_MODES.get(self.game_mode, {})
@@ -1979,8 +2811,24 @@ class Game:
                             self.mine_hit_animation_time = time.time()
                             self.life_lost_animation_time = time.time()
 
+                            # Play mine hit sound
+                            if self.sound_mine_hit:
+                                self.sound_mine_hit.play()
+
                             # Verificar game over
                             if self.lives <= 0:
+                                # Play game over sound
+                                if self.sound_game_over:
+                                    self.sound_game_over.play()
+
+                                # Store data for name input before game over
+                                self.pending_score_data = {
+                                    'level': self.level,
+                                    'time': self.total_time,
+                                    'score': 0,  # No score on game over
+                                    'game_mode': self.game_mode,
+                                    'is_game_over': True
+                                }
                                 self.state = "GAME_OVER"
                             else:
                                 # Resetar posição da bola
@@ -1997,6 +2845,17 @@ class Game:
                     self.timer -= dt
                     if self.timer <= 0:
                         self.timer = 0
+                        # Store data for name input before game over
+                        self.pending_score_data = {
+                            'level': self.level,
+                            'time': self.total_time,
+                            'score': 0,
+                            'game_mode': self.game_mode,
+                            'is_game_over': True
+                        }
+                        # Play game over sound
+                        if self.sound_game_over:
+                            self.sound_game_over.play()
                         self.state = "GAME_OVER"
                 else:
                     # Timer crescente (normal)
@@ -2019,12 +2878,16 @@ class Game:
                 self.draw_settings()
             elif self.state == "LEADERBOARD":
                 self.draw_leaderboard()
+            elif self.state == "PLAYER_PROFILE":
+                self.draw_player_profile()
             elif self.state == "PLAYING":
                 self.draw_playing()
             elif self.state == "PAUSED":
                 self.draw_pause()
             elif self.state == "WIN":
                 self.draw_win()
+            elif self.state == "NAME_INPUT":
+                self.draw_name_input()
             elif self.state == "GAME_OVER":
                 self.draw_gameover()
 
