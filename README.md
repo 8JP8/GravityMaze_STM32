@@ -133,19 +133,10 @@ CREATE TABLE leaderboard (
     date TEXT NOT NULL
 );
 ```
+## 👤 Autores
 
-## 🎨 Paleta de Cores
-
-- **Fundo**: Preto (#000000)
-- **Paredes**: Branco (#FFFFFF)
-- **Bola**: Vermelho (#FF0000)
-- **Objetivo**: Verde (#00FF00)
-- **HUD**: Amarelo (#FFFF00)
-- **Ouro**: #FFD700 (Leaderboard)
-
-## 👤 Autor
-
-João Santos - ISEP 2025
+João Oliveira - 1240369 - ISEP 2025
+João Santos - 1240368 - ISEP 2025
 
 ## 📄 Licença
 
