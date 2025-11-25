@@ -1,7 +1,8 @@
 {
-    "sensitivity": 0.46099999999999997,
+    "sensitivity": 0.6699999999999999,
     "invert_x": false,
     "invert_y": false,
     "swap_xy": true,
+    "language": "pt",
     "swap_yz": true
 }
