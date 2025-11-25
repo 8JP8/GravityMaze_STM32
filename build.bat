@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [1/5] Checking/Installing PyInstaller...
+echo [1/6] Checking/Installing PyInstaller...
 pip show pyinstaller >nul 2>&1
 if %errorlevel% neq 0 (
     echo Installing PyInstaller...
@@ -22,7 +22,7 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [2/5] Checking/Installing Pillow for icon creation...
+echo [2/6] Checking/Installing Pillow for icon creation...
 pip show pillow >nul 2>&1
 if %errorlevel% neq 0 (
     echo Installing Pillow...
@@ -31,15 +31,24 @@ if %errorlevel% neq 0 (
     echo Pillow already installed.
 )
 
+echo [3/6] Checking/Installing pywin32 for advanced icon handling...
+pip show pywin32 >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Installing pywin32...
+    pip install pywin32
+) else (
+    echo pywin32 already installed.
+)
+
 echo.
-echo [3/5] Creating game icon...
+echo [4/6] Creating game icon...
 python create_icon.py
 if %errorlevel% neq 0 (
     echo Warning: Could not create icon. Continuing without custom icon...
 )
 
 echo.
-echo [4/5] Building executable with PyInstaller...
+echo [5/6] Building executable with PyInstaller...
 echo This may take a few minutes...
 pyinstaller --onefile ^
     --windowed ^
@@ -60,7 +69,7 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [5/5] Build complete!
+echo [6/6] Build complete!
 echo.
 echo Executable location: dist\GravityMaze.exe
 echo.
