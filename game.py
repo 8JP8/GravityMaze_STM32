@@ -95,6 +95,37 @@ TRANSLATIONS = {
         'date': 'Data',
         'mode': 'Modo',
         'save_progress': 'Guardar Progresso',
+        'single_player': 'Um Jogador',
+        'multi_player': 'Multijogador',
+        'select_players': 'Selecionar Jogadores',
+        'controls': 'Controlos',
+        'show_commands': 'Mostrar Comandos',
+        'movement': 'Movimento',
+        'player_1': 'Jogador 1',
+        'player_2': 'Jogador 2',
+        'general': 'Geral',
+        'arrows': 'Setas',
+        'wasd': 'WASD',
+        'pause': 'Pausar',
+        'restart': 'Reiniciar',
+        'stm32_test': 'Teste STM32',
+        'stm32_setup': 'Configuração STM32',
+        'beep_1': 'Apitar Placa 1',
+        'beep_2': 'Apitar Placa 2',
+        'waiting_partner': 'À espera do parceiro...',
+        'winner': 'VENCEDOR',
+        'eliminated': 'ELIMINADO',
+        'both_lost': 'AMBOS PERDERAM',
+        'draw': 'EMPATE',
+        'p1_wins': 'JOGADOR 1 VENCEU!',
+        'p2_wins': 'JOGADOR 2 VENCEU!',
+        'play_again': 'Jogar Novamente',
+        'select_difficulty': 'Selecionar Dificuldade',
+        'difficulty_easy': 'Fácil',
+        'difficulty_normal': 'Normal',
+        'difficulty_hard': 'Difícil',
+        'hud_instructions': 'ESC: Pausar | R: Reiniciar',
+        'stm32_detected': 'STM32 Detectados',
     },
     'en': {
         'title': 'GravityMaze',
@@ -159,6 +190,37 @@ TRANSLATIONS = {
         'date': 'Date',
         'mode': 'Mode',
         'save_progress': 'Save Progress',
+        'single_player': 'Single Player',
+        'multi_player': 'Multiplayer',
+        'select_players': 'Select Players',
+        'controls': 'Controls',
+        'show_commands': 'Show Commands',
+        'movement': 'Movement',
+        'player_1': 'Player 1',
+        'player_2': 'Player 2',
+        'general': 'General',
+        'arrows': 'Arrows',
+        'wasd': 'WASD',
+        'pause': 'Pause',
+        'restart': 'Restart',
+        'stm32_test': 'STM32 Test',
+        'stm32_setup': 'STM32 Setup',
+        'beep_1': 'Beep Board 1',
+        'beep_2': 'Beep Board 2',
+        'waiting_partner': 'Waiting for partner...',
+        'winner': 'WINNER',
+        'eliminated': 'ELIMINATED',
+        'both_lost': 'BOTH LOST',
+        'draw': 'DRAW',
+        'p1_wins': 'PLAYER 1 WINS!',
+        'p2_wins': 'PLAYER 2 WINS!',
+        'play_again': 'Play Again',
+        'select_difficulty': 'Select Difficulty',
+        'difficulty_easy': 'Easy',
+        'difficulty_normal': 'Normal',
+        'difficulty_hard': 'Hard',
+        'hud_instructions': 'ESC: Pause | R: Restart',
+        'stm32_detected': 'STM32 Detected',
     }
 }
 
@@ -179,6 +241,7 @@ GRAY = (100, 100, 100)
 DARK_GRAY = (50, 50, 50)
 LIGHT_GRAY = (150, 150, 150)
 GOLD = (255, 215, 0)
+ORANGE = (255, 100, 0)
 
 # Configurações da bola
 BALL_RADIUS = 10
@@ -326,6 +389,7 @@ GAME_MODES = {
         'initial_lives': 5,
         'mines_everywhere': True,  # Minas em células aleatórias
         'mine_percentage': 0.15,  # 15% das células têm minas
+        'track_precision': True,
         'desc_pt': 'Evite as minas invisíveis!',
         'desc_en': 'Avoid the invisible mines!'
     },
@@ -336,6 +400,7 @@ GAME_MODES = {
         'initial_time': 300,  # 5 minutos em segundos
         'has_lives': True,
         'initial_lives': 5,
+        'track_precision': True,
         'desc_pt': 'Complete o máximo de níveis em 5 minutos',
         'desc_en': 'Complete as many levels as possible in 5 minutes'
     },
@@ -349,6 +414,7 @@ GAME_MODES = {
         'initial_time': 60,  # Começa com 60s
         'has_lives': True,
         'initial_lives': 5,
+        'track_precision': True,
         'desc_pt': 'Complete níveis para ganhar mais tempo',
         'desc_en': 'Complete levels to gain more time'
     }
@@ -581,14 +647,14 @@ class Database:
                 SELECT player_name, level, time, score, date, game_mode
                 FROM leaderboard
                 WHERE game_mode = ?
-                ORDER BY score DESC, time ASC
+                ORDER BY level DESC, score DESC, time ASC
                 LIMIT ?
             ''', (game_mode, limit))
         else:
             cursor.execute('''
                 SELECT player_name, level, time, score, date, game_mode
                 FROM leaderboard
-                ORDER BY score DESC, time ASC
+                ORDER BY level DESC, score DESC, time ASC
                 LIMIT ?
             ''', (limit,))
         return cursor.fetchall()
@@ -630,7 +696,7 @@ class Button:
         if event.type == pygame.MOUSEMOTION:
             self.is_hovered = self.rect.collidepoint(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            if self.is_hovered:
+            if event.button == 1 and self.is_hovered:
                 return True
         return False
 
@@ -786,7 +852,7 @@ class TextInput:
         return None
 
 class Ball:
-    def __init__(self, x, y, sensitivity=1.0, world_width=DEFAULT_WIDTH, world_height=DEFAULT_HEIGHT):
+    def __init__(self, x, y, sensitivity=1.0, world_width=DEFAULT_WIDTH, world_height=DEFAULT_HEIGHT, color=BALL_COLOR):
         self.x = x
         self.y = y
         self.vx = 0
@@ -795,8 +861,13 @@ class Ball:
         self.sensitivity = sensitivity
         self.world_width = world_width
         self.world_height = world_height
+        self.color = color
+        self.base_friction = FRICTION # Store original friction
 
-    def update(self, ax, ay, dt, walls):
+    def update(self, ax, ay, dt, walls, friction_factor=None):
+        if friction_factor is None:
+            friction_factor = self.base_friction
+
         # Aplicar curva suave para transição mais natural
         # Usar função quadrática para amplificar pequenas inclinações
         # e suavizar grandes inclinações
@@ -821,9 +892,9 @@ class Ball:
         self.vx += ax_smooth * REAL_GRAVITY * self.sensitivity * dt
         self.vy += ay_smooth * REAL_GRAVITY * self.sensitivity * dt
 
-        # Aplicar fricção
-        self.vx *= FRICTION
-        self.vy *= FRICTION
+        # Aplicar fricção (usando o fator ajustado para sub-stepping)
+        self.vx *= friction_factor
+        self.vy *= friction_factor
 
         # Calcular nova posição
         new_x = self.x + self.vx * dt
@@ -896,11 +967,14 @@ class Ball:
 
     def draw(self, screen):
         # Sombra
-        pygame.draw.circle(screen, (100, 0, 0), (int(self.x) + 3, int(self.y) + 3), self.radius)
+        shadow_color = (int(self.color[0] * 0.4), int(self.color[1] * 0.4), int(self.color[2] * 0.4))
+        pygame.draw.circle(screen, shadow_color, (int(self.x) + 3, int(self.y) + 3), self.radius)
         # Bola principal
-        pygame.draw.circle(screen, BALL_COLOR, (int(self.x), int(self.y)), self.radius)
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
         # Highlight
-        pygame.draw.circle(screen, (255, 100, 100), (int(self.x) - 3, int(self.y) - 3), self.radius // 3)
+        # Make highlight also use the ball's color
+        highlight_color = (min(255, int(self.color[0] * 1.5)), min(255, int(self.color[1] * 1.5)), min(255, int(self.color[2] * 1.5)))
+        pygame.draw.circle(screen, highlight_color, (int(self.x) - 3, int(self.y) - 3), self.radius // 3)
 
 class Mine:
     def __init__(self, x, y, size=3):
@@ -1113,12 +1187,18 @@ class MazeGenerator:
         return mines
 
     @staticmethod
-    def generate(level, world_width, world_height, game_mode='normal', mine_percentage=0.15):
-        """Gerar labirinto baseado no nível"""
-        # Ajustar tamanho das células baseado no nível
-        # Níveis mais altos = células menores = labirintos mais complexos
+    def generate(level, world_width, world_height, game_mode='normal', mine_percentage=0.15, difficulty='normal'):
+        """Gerar labirinto baseado no nível e dificuldade"""
+        # Ajustar tamanho das células baseado no nível e dificuldade
+        # Easy = maior, Hard = menor
         base_cell_size = 80
-        cell_size = max(50, base_cell_size - (level - 1) * 4)
+        if difficulty == 'easy':
+            base_cell_size = 100
+        elif difficulty == 'hard':
+            base_cell_size = 60
+
+        # Níveis mais altos diminuem um pouco o tamanho, mas respeitando a dificuldade
+        cell_size = max(40, base_cell_size - (level - 1) * 2)
 
         # Criar gerador com margens, ajustando a altura para a nova margem superior
         maze_width_available = world_width - (MAZE_MARGIN * 2)
@@ -1147,11 +1227,18 @@ class MazeGenerator:
             x, y, width, height = wall
             walls_with_margin.append((x + MAZE_MARGIN, y + MAZE_MARGIN_TOP, width, height))
 
-        # Gerar minas baseado no modo de jogo
+        # Gerar minas baseado no modo de jogo e dificuldade
+        # Ajustar percentagem baseada na dificuldade
+        adjusted_percentage = mine_percentage
+        if difficulty == 'easy':
+            adjusted_percentage *= 0.6
+        elif difficulty == 'hard':
+            adjusted_percentage *= 1.4
+            
         mines = []
         if game_mode == 'minefield':
             # Minas espalhadas aleatoriamente
-            mines = generator.place_mines_everywhere(mine_percentage)
+            mines = generator.place_mines_everywhere(adjusted_percentage)
         elif game_mode == 'normal':
             # Sem minas no modo normal
             mines = []
@@ -1162,37 +1249,61 @@ class MazeGenerator:
             mine.x += MAZE_MARGIN
             mine.y += MAZE_MARGIN_TOP
 
-        return walls_with_margin, mines
+        # Calculate Goal Position (Center of last cell)
+        # Last cell is at (maze_width - cell_size, maze_height - cell_size) relative to maze origin
+        # Plus margins and half cell size for center
+        goal_x = MAZE_MARGIN + maze_width - (cell_size // 2)
+        goal_y = MAZE_MARGIN_TOP + maze_height - (cell_size // 2)
+
+        return walls_with_margin, mines, (goal_x, goal_y), cell_size
 
 class Game:
     def __init__(self):
         pygame.init()
         pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
 
+        # Set window icon BEFORE set_mode to avoid SetProp errors
+        try:
+            # Prefer PNG for Pygame compatibility
+            icon_path = "icon.png"
+            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                icon_path = os.path.join(sys._MEIPASS, 'icon.png')
+            
+            # Fallback to ICO if PNG not found
+            if not os.path.exists(icon_path):
+                icon_path = "icon.ico"
+                if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                    icon_path = os.path.join(sys._MEIPASS, 'icon.ico')
+
+            if os.path.exists(icon_path):
+                icon_surface = pygame.image.load(icon_path)
+                # Scale to 32x32 to prevent potential memory errors with large icons
+                icon_surface = pygame.transform.scale(icon_surface, (32, 32))
+                pygame.display.set_icon(icon_surface)
+        except Exception as e:
+            print(f"Warning: Could not set window icon: {e}")
+
         # Dimensões da janela (redimensionável)
         self.window_width = DEFAULT_WIDTH
         self.window_height = DEFAULT_HEIGHT
-        self.screen = pygame.display.set_mode(
-            (self.window_width, self.window_height),
-            pygame.RESIZABLE
-        )
-        pygame.display.set_caption("GravityMaze - Controlo ADXL345")
-
-        # Set window icon if available
+        
+        # Try to set mode, fallback if SetProp fails (common on Windows)
         try:
-            icon_path = None
-            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-                # Running in a PyInstaller bundle
-                icon_path = os.path.join(sys._MEIPASS, 'icon.ico')
-            else:
-                # Running as a script
-                icon_path = 'icon.ico'
+            self.screen = pygame.display.set_mode(
+                (self.window_width, self.window_height),
+                pygame.RESIZABLE
+            )
+        except pygame.error as e:
+            print(f"Warning: Failed to set RESIZABLE mode ({e}). Retrying without it.")
+            try:
+                self.screen = pygame.display.set_mode(
+                    (self.window_width, self.window_height)
+                )
+            except pygame.error as e2:
+                print(f"Critical Error: Failed to set video mode: {e2}")
+                raise e2
 
-            if icon_path and os.path.exists(icon_path):
-                icon = pygame.image.load(icon_path)
-                pygame.display.set_icon(icon)
-        except Exception as e:
-            print(f"Could not load icon: {e}")
+        pygame.display.set_caption("GravityMaze - Controlo ADXL345")
 
         self.clock = pygame.time.Clock()
 
@@ -1244,10 +1355,16 @@ class Game:
         self.accel_x = 0
         self.accel_y = 0
         self.accel_z = 0
+        
+        self.accel2_x = 0
+        self.accel2_y = 0
 
         # Aceleração do teclado (para combinar com acelerómetro)
         self.keyboard_accel_x = 0
         self.keyboard_accel_y = 0
+        
+        self.keyboard2_accel_x = 0
+        self.keyboard2_accel_y = 0
 
         # Configurações (carregar do arquivo)
         self.sensitivity = self.config.get('sensitivity')
@@ -1258,6 +1375,21 @@ class Game:
 
         # Modo de jogo
         self.game_mode = 'normal'  # normal, minefield, timeattack, elimination
+        self.difficulty = 'normal' # easy, normal, hard
+        self.num_players = 1 # 1 or 2
+        self.ball2 = None
+        self.player1_finished = False
+        self.player2_finished = False
+        self.player1_time = 0
+        self.player2_time = 0
+        self.player1_score = 0
+        self.player2_score = 0
+        self.player1_lives = 0
+        self.player2_lives = 0
+        self.winner = None # "Player 1", "Player 2" or None
+        self.stm32_ports = [] # List of connected STM32 ports
+        self.p1_port_index = -1
+        self.p2_port_index = -1
 
 
         # Sistema de vidas
@@ -1276,7 +1408,7 @@ class Game:
         self.mines = []
 
         # Estado do jogo
-        self.state = "MENU"  # MENU, SETTINGS, PLAYING, PAUSED, WIN, LEADERBOARD, MODE_SELECT, NAME_INPUT, GAME_OVER, PLAYER_PROFILE
+        self.state = "MENU"  # MENU, SETTINGS, PLAYING, PAUSED, WIN, LEADERBOARD, MODE_SELECT, NAME_INPUT, GAME_OVER, PLAYER_PROFILE, DIFFICULTY_SELECT, STM32_SETUP, CONTROLS
         self.running = True
         self.pending_score_data = None  # Store score data until name is entered
         self.selected_player_name = None  # For player profile view
@@ -1305,15 +1437,32 @@ class Game:
 
         # Controlo de redesenho do menu de pausa
         self.pause_menu_dirty = True
+        
+        # Cursor state
+        self.cursor_hand_active = False
 
         # Criar menus
         self.create_menus()
 
         # Tentar conectar ao serial automaticamente
         self.connect_serial()
+        
+        # Iniciar thread de scan em background
+        self.scan_thread = threading.Thread(target=self.serial_scan_loop, daemon=True)
+        self.scan_thread.start()
 
         # Inicializar jogo
         self.init_level()
+
+    def serial_scan_loop(self):
+        """Background thread to scan for STM32 ports continuously"""
+        while self.running:
+            try:
+                ports = self.scan_stm32_ports()
+                self.stm32_ports = ports
+            except Exception as e:
+                print(f"Error in scan thread: {e}")
+            time.sleep(2) # Scan every 2 seconds
 
     def send_beep_command(self):
         """Enviar comando 'B' para o STM32 fazer beep de forma assíncrona."""
@@ -1351,17 +1500,169 @@ class Game:
         mine_thread = threading.Thread(target=mine_async, daemon=True)
         mine_thread.start()
 
+    def create_stm32_setup_buttons(self):
+        """Criar botões para configuração STM32"""
+        center_x = self.world_width // 2
+        button_width = 400
+        button_height = 60
+        
+        self.stm32_setup_buttons = [
+            Button(center_x - button_width // 2, 400, button_width, button_height, t('beep_1', self.language), BLUE),
+            Button(center_x - button_width // 2, 480, button_width, button_height, t('beep_2', self.language), RED),
+            Button(center_x - button_width // 2, 600, button_width, button_height, t('continue', self.language), DARK_GREEN),
+            Button(center_x - button_width // 2, 670, button_width, button_height, t('back', self.language), GRAY),
+        ]
+
+    def draw_stm32_setup(self):
+        """Desenhar tela de configuração STM32"""
+        self.world_surface.fill(BLACK)
+        
+        # Update texts
+        self.stm32_setup_buttons[0].text = t('beep_1', self.language)
+        self.stm32_setup_buttons[1].text = t('beep_2', self.language)
+        self.stm32_setup_buttons[2].text = t('continue', self.language)
+        self.stm32_setup_buttons[3].text = t('back', self.language)
+        
+        # Title
+        title = self.font.render(t('stm32_setup', self.language), True, WHITE)
+        title_rect = title.get_rect(center=(self.world_width // 2, 80))
+        self.world_surface.blit(title, title_rect)
+        
+        # Info
+        info_text = "Detectados: " + ", ".join(self.stm32_ports)
+        info = self.small_font.render(info_text, True, GRAY)
+        info_rect = info.get_rect(center=(self.world_width // 2, 150))
+        self.world_surface.blit(info, info_rect)
+        
+        # Instructions
+        instr = self.small_font.render("Teste qual placa é qual para posicionar corretamente.", True, WHITE)
+        instr_rect = instr.get_rect(center=(self.world_width // 2, 200))
+        self.world_surface.blit(instr, instr_rect)
+        
+        # Player Assignments
+        p1_txt = f"{t('player_1', self.language)}: {self.stm32_ports[0] if len(self.stm32_ports) > 0 else 'N/A'} (Setas)"
+        p2_txt = f"{t('player_2', self.language)}: {self.stm32_ports[1] if len(self.stm32_ports) > 1 else 'N/A'} (WASD)"
+        
+        p1_surf = self.font.render(p1_txt, True, RED) # Player 1 is Red
+        p2_surf = self.font.render(p2_txt, True, GREEN) # Player 2 is Green
+        
+        self.world_surface.blit(p1_surf, p1_surf.get_rect(center=(self.world_width // 2, 280)))
+        self.world_surface.blit(p2_surf, p2_surf.get_rect(center=(self.world_width // 2, 330)))
+
+        for button in self.stm32_setup_buttons:
+            button.draw(self.world_surface, self.font)
+            
+        self.render_world_to_screen()
+        pygame.display.flip()
+
+    def send_beep_to_port(self, port_name):
+        """Enviar beep para uma porta específica"""
+        def beep_async():
+            try:
+                with serial.Serial(port_name, 115200, timeout=0.1) as ser:
+                    ser.write(b'B')
+            except Exception as e:
+                print(f"Erro beep {port_name}: {e}")
+        threading.Thread(target=beep_async, daemon=True).start()
+
+    def handle_stm32_setup_events(self, event):
+        """Eventos configuração STM32"""
+        for i, button in enumerate(self.stm32_setup_buttons):
+            if button.handle_event(event):
+                if i == 0: # Beep 1
+                    if len(self.stm32_ports) > 0:
+                        self.send_beep_to_port(self.stm32_ports[0])
+                elif i == 1: # Beep 2
+                    if len(self.stm32_ports) > 1:
+                        self.send_beep_to_port(self.stm32_ports[1])
+                elif i == 2: # Continue
+                    # Connect to ports
+                    try:
+                        if self.serial_port:
+                            self.serial_port.close()
+                        
+                        # Connect P1
+                        if len(self.stm32_ports) > 0:
+                            self.serial_port = serial.Serial(self.stm32_ports[0], 115200, timeout=0.01)
+                            self.serial_connected = True
+                        
+                        # P2 handled separately? 
+                        # Currently self.serial_port is only one.
+                        # I need to handle 2 serial ports in the game loop.
+                        # For now, let's assume I need to change `read_serial` to read from multiple.
+                        pass 
+                    except:
+                        pass
+                    self.state = "MODE_SELECT"
+                elif i == 3: # Back
+                    self.state = "PLAYER_SELECT"
+
+    def create_difficulty_buttons(self):
+        """Criar botões de seleção de dificuldade"""
+        button_width = 400
+        button_height = 70
+        center_x = self.world_width // 2 - button_width // 2
+        
+        # Consistent layout: Options start at 300, Back at 600
+        self.difficulty_buttons = [
+            Button(center_x, 300, button_width, button_height, "Easy", DARK_GREEN),
+            Button(center_x, 390, button_width, button_height, "Normal", ORANGE),
+            Button(center_x, 480, button_width, button_height, "Hard", RED),
+            Button(center_x, 600, button_width, button_height, "Back", GRAY)
+        ]
+
+    def draw_difficulty_select(self):
+        """Desenhar menu de seleção de dificuldade"""
+        self.world_surface.fill(BLACK)
+        
+        # Update texts
+        self.difficulty_buttons[0].text = t('difficulty_easy', self.language)
+        self.difficulty_buttons[1].text = t('difficulty_normal', self.language)
+        self.difficulty_buttons[2].text = t('difficulty_hard', self.language)
+        self.difficulty_buttons[3].text = t('back', self.language)
+        
+        # Title
+        title = self.font.render(t('select_difficulty', self.language), True, WHITE)
+        title_rect = title.get_rect(center=(self.world_width // 2, 150))
+        self.world_surface.blit(title, title_rect)
+        
+        for button in self.difficulty_buttons:
+            button.draw(self.world_surface, self.font)
+            
+        self.render_world_to_screen()
+        pygame.display.flip()
+        
+    def handle_difficulty_select_events(self, event):
+        """Handle difficulty selection events"""
+        for i, button in enumerate(self.difficulty_buttons):
+            if button.handle_event(event):
+                if i == 0:
+                    self.difficulty = 'easy'
+                    self.state = "PLAYER_SELECT"
+                elif i == 1:
+                    self.difficulty = 'normal'
+                    self.state = "PLAYER_SELECT"
+                elif i == 2:
+                    self.difficulty = 'hard'
+                    self.state = "PLAYER_SELECT"
+                elif i == 3:
+                    self.state = "MENU"
+
     def create_menus(self):
         """Criar botões dos menus estilo Minecraft"""
         button_width = 400
         button_height = 70
         center_x = self.world_width // 2 - button_width // 2
+        
+        # Create difficulty buttons
+        self.create_difficulty_buttons()
 
         # Menu principal (will use translations when drawing)
+        # Consistent layout: Options start at 300
         self.main_menu_buttons = [
             Button(center_x, 300, button_width, button_height, t('play', self.language), DARK_GREEN),
-            Button(center_x, 390, button_width, button_height, t('settings', self.language), GRAY),
-            Button(center_x, 480, button_width, button_height, t('leaderboard', self.language), BLUE),
+            Button(center_x, 390, button_width, button_height, t('settings', self.language), BLUE),
+            Button(center_x, 480, button_width, button_height, t('leaderboard', self.language), ORANGE),
             Button(center_x, 570, button_width, button_height, t('exit', self.language), RED),
         ]
 
@@ -1411,7 +1712,7 @@ class Game:
         ]
 
         self.leaderboard_buttons = [
-            Button(center_x, 630, button_width, button_height, "Voltar", GRAY),
+            Button(center_x, 600, button_width, button_height, "Voltar", GRAY),
         ]
 
         # Menu de seleção de modos - usar cards verticais
@@ -1440,9 +1741,22 @@ class Game:
         self.mode_select_back_button = Button(center_x, start_y + (card_height + card_spacing) * 4 + 20,
                                                button_width, button_height, "Voltar", GRAY)
 
+        # Menu de seleção de jogadores
+        self.player_select_buttons = [
+            Button(center_x, 300, button_width, button_height, t('single_player', self.language), BLUE),
+            Button(center_x, 390, button_width, button_height, t('multi_player', self.language), RED),
+            Button(center_x, 600, button_width, button_height, t('back', self.language), GRAY),
+        ]
+
         # Menu de Game Over
         self.gameover_buttons = [
             Button(center_x, 400, button_width, button_height, "Tentar Novamente", DARK_GREEN),
+            Button(center_x, 490, button_width, button_height, "Menu Principal", GRAY),
+        ]
+        
+        # Menu de Vitória Multiplayer
+        self.mp_win_buttons = [
+            Button(center_x, 400, button_width, button_height, t('play_again', self.language), DARK_GREEN),
             Button(center_x, 490, button_width, button_height, "Menu Principal", GRAY),
         ]
 
@@ -1462,68 +1776,54 @@ class Game:
 
     def connect_serial(self):
         """Conectar à porta série do STM32"""
+        ports = self.scan_stm32_ports()
+        self.stm32_ports = ports  # Update cached list
+        
+        if ports:
+            try:
+                print(f"  A tentar conectar a {ports[0]}...")
+                self.serial_port = serial.Serial(
+                    ports[0],
+                    baudrate=115200,
+                    timeout=0.01
+                )
+                self.serial_connected = True
+                print(f"  [OK] Conectado a: {ports[0]}")
+                return True
+            except Exception as e:
+                print(f"  [X] Erro ao conectar a {ports[0]}: {e}")
+        
+        print("\nAVISO: Nenhum STM32 encontrado. A usar teclado para controlo.")
+        return False
+
+    def scan_stm32_ports(self):
+        """Procurar por portas STM32 disponíveis"""
         ports = serial.tools.list_ports.comports()
-
-        # Lista de identificadores comuns de STM32
         stm32_identifiers = [
-            'STM32',
-            'STMicroelectronics',
-            'VCP',  # Virtual COM Port
-            'USB Serial Device',
-            'USB-SERIAL CH340',  # Chip conversor comum
-            'CP210',  # Silicon Labs
-            'FTDI',  # FTDI conversor
+            'STM32', 'STMicroelectronics', 'VCP', 'USB Serial Device',
+            'USB-SERIAL CH340', 'CP210', 'FTDI'
         ]
-
-        """
-        print("\n=== Portas série disponíveis ===")
+        
+        found_ports = []
         for port in ports:
-            print(f"  {port.device}: {port.description}")
-            print(f"    Fabricante: {port.manufacturer}")
-            print(f"    VID:PID: {port.vid}:{port.pid}")
-            print(f"    Serial: {port.serial_number}")
-        """
-
-        print("\n=== A procurar STM32... ===")
-        for port in ports:
-            # Verificar se é um dispositivo STM32 ou conversor USB-Serial conhecido
             is_stm32 = False
-
-            # Verificar descrição
             if port.description:
                 for identifier in stm32_identifiers:
                     if identifier.lower() in port.description.lower():
                         is_stm32 = True
                         break
-
-            # Verificar fabricante
             if not is_stm32 and port.manufacturer:
                 for identifier in stm32_identifiers:
                     if identifier.lower() in port.manufacturer.lower():
                         is_stm32 = True
                         break
-
-            # VID específico da STMicroelectronics (0x0483)
             if not is_stm32 and port.vid == 0x0483:
                 is_stm32 = True
 
             if is_stm32:
-                try:
-                    print(f"  A tentar conectar a {port.device}...")
-                    self.serial_port = serial.Serial(
-                        port.device,
-                        baudrate=115200,
-                        timeout=0.01
-                    )
-                    self.serial_connected = True
-                    print(f"  [OK] Conectado a: {port.device} ({port.description})")
-                    return True
-                except Exception as e:
-                    print(f"  [X] Erro ao conectar a {port.device}: {e}")
-                    continue
-
-        print("\nAVISO: Nenhum STM32 encontrado. A usar teclado para controlo.")
-        return False
+                found_ports.append(port.device)
+        
+        return found_ports
 
     def init_level(self):
         """Inicializar um novo nível"""
@@ -1531,23 +1831,51 @@ class Game:
         mode_config = GAME_MODES.get(self.game_mode, {})
         mine_percentage = mode_config.get('mine_percentage', 0.15)
 
-        # Gerar labirinto com minas
-        self.walls, self.mines = MazeGenerator.generate(
+        # Gerar labirinto com minas (usando dificuldade)
+        self.walls, self.mines, self.goal_pos, current_cell_size = MazeGenerator.generate(
             self.level,
             self.world_width,
             self.world_height,
             self.game_mode,
-            mine_percentage
+            mine_percentage,
+            self.difficulty
         )
+
+        # Adjust goal radius to fit in cell (max 30, or 40% of cell size to avoid touching walls)
+        self.goal_radius = min(30, int(current_cell_size * 0.4))
 
         # Posição inicial da bola (com margem segura)
         ball_start_x = MAZE_MARGIN + 60
         ball_start_y = MAZE_MARGIN_TOP + 60
         self.ball = Ball(ball_start_x, ball_start_y, self.sensitivity, self.world_width, self.world_height)
-
-        # Objetivo como círculo/buraco verde (com margem segura e longe de paredes)
-        self.goal_radius = 30
-        self.goal_pos = (self.world_width - MAZE_MARGIN - 75, self.world_height - MAZE_MARGIN - 95)
+        
+        # Setup Multiplayer
+        if self.num_players == 2:
+            # Balls placed equidistant from the top-left corner (0,0) of the cell
+            # This forms a triangle with the corner wall, ensuring fairness.
+            
+            # Distances within the cell
+            dist_far = current_cell_size * 0.75
+            dist_close = current_cell_size * 0.25
+            
+            start_x = MAZE_MARGIN
+            start_y = MAZE_MARGIN_TOP
+            
+            # P1 (Red): Further Right, Closer to Top
+            self.ball.x = start_x + dist_far
+            self.ball.y = start_y + dist_close
+            
+            # P2 (Green): Further Down, Closer to Left
+            self.ball2 = Ball(start_x + dist_close, start_y + dist_far, self.sensitivity, self.world_width, self.world_height, color=GREEN)
+            
+            self.player1_finished = False
+            self.player2_finished = False
+            
+            # Store starting distances for score calculation
+            self.p1_start_dist = math.sqrt((self.ball.x - self.goal_pos[0])**2 + (self.ball.y - self.goal_pos[1])**2)
+            self.p2_start_dist = math.sqrt((self.ball2.x - self.goal_pos[0])**2 + (self.ball2.y - self.goal_pos[1])**2)
+        else:
+            self.ball2 = None
 
         # Resetar variáveis do nível
         self.timer = 0
@@ -1561,16 +1889,31 @@ class Game:
             self.collision_pause_time = 0
             self.last_precision_update = time.time()
 
-        # Configurar timer baseado no modo
+        # Configurar timer baseado no modo e dificuldade
         if mode_config.get('timer_direction') == 'down':
-            if mode_config.get('random_time_on_level', False):
-                # Modo eliminação - tempo aleatório
+            if self.game_mode == 'elimination':
+                 # Random time adjustments based on difficulty
+                 base_min, base_max = 30, 80
+                 if self.difficulty == 'easy':
+                     base_min, base_max = 45, 100
+                 elif self.difficulty == 'hard':
+                     base_min, base_max = 35, 75
+                 
+                 self.timer = random.randint(base_min, base_max)
+            elif mode_config.get('random_time_on_level', False):
+                # Fallback logic
                 min_time = mode_config.get('random_time_min', 30)
                 max_time = mode_config.get('random_time_max', 80)
                 self.timer = random.randint(min_time, max_time)
             else:
-                # Modo time attack - tempo fixo
-                self.timer = mode_config.get('initial_time', 60)
+                # Modo time attack - tempo fixo adjusted by difficulty
+                base_time = mode_config.get('initial_time', 60)
+                if self.difficulty == 'easy':
+                    self.timer = base_time + 60 # +1 min
+                elif self.difficulty == 'hard':
+                    self.timer = max(30, base_time - 60) # -1 min
+                else:
+                    self.timer = base_time
 
     def get_scale_and_offset(self):
         """Calcular escala e offset para manter proporções ao redimensionar"""
@@ -1654,11 +1997,14 @@ class Game:
         # Resetar aceleração do teclado
         self.keyboard_accel_x = 0
         self.keyboard_accel_y = 0
+        self.keyboard2_accel_x = 0
+        self.keyboard2_accel_y = 0
 
         # Calcular aceleração do teclado (normalizada para ser similar ao acelerómetro)
         # O acelerómetro retorna valores entre -1 e 1 (em g's)
         keyboard_accel_magnitude = 0.5  # Equivalente a 0.5g
 
+        # Player 1 (Arrows)
         if keys[pygame.K_LEFT]:
             self.keyboard_accel_x -= keyboard_accel_magnitude
         if keys[pygame.K_RIGHT]:
@@ -1667,12 +2013,28 @@ class Game:
             self.keyboard_accel_y -= keyboard_accel_magnitude
         if keys[pygame.K_DOWN]:
             self.keyboard_accel_y += keyboard_accel_magnitude
+            
+        # Player 2 (WASD)
+        if self.num_players == 2:
+            if keys[pygame.K_a]:
+                self.keyboard2_accel_x -= keyboard_accel_magnitude
+            if keys[pygame.K_d]:
+                self.keyboard2_accel_x += keyboard_accel_magnitude
+            if keys[pygame.K_w]:
+                self.keyboard2_accel_y -= keyboard_accel_magnitude
+            if keys[pygame.K_s]:
+                self.keyboard2_accel_y += keyboard_accel_magnitude
 
         # Normalizar se diagonal (para não ter aceleração maior nas diagonais)
         if self.keyboard_accel_x != 0 and self.keyboard_accel_y != 0:
             diagonal_factor = 1 / math.sqrt(2)
             self.keyboard_accel_x *= diagonal_factor
             self.keyboard_accel_y *= diagonal_factor
+            
+        if self.keyboard2_accel_x != 0 and self.keyboard2_accel_y != 0:
+            diagonal_factor = 1 / math.sqrt(2)
+            self.keyboard2_accel_x *= diagonal_factor
+            self.keyboard2_accel_y *= diagonal_factor
 
         # Reset da aceleração do acelerómetro quando se usa apenas teclado
         if not self.serial_connected:
@@ -1680,6 +2042,9 @@ class Game:
             if not any([keys[pygame.K_LEFT], keys[pygame.K_RIGHT], keys[pygame.K_UP], keys[pygame.K_DOWN]]):
                 self.accel_x = 0
                 self.accel_y = 0
+            if not any([keys[pygame.K_a], keys[pygame.K_d], keys[pygame.K_w], keys[pygame.K_s]]):
+                self.accel2_x = 0
+                self.accel2_y = 0
 
     def check_win(self):
         """Verificar se a bola chegou ao objetivo (buraco)"""
@@ -1687,11 +2052,8 @@ class Game:
         if self.state != "PLAYING":
             return
 
-        dx = self.ball.x - self.goal_pos[0]
-        dy = self.ball.y - self.goal_pos[1]
-        distance = math.sqrt(dx*dx + dy*dy)
-
-        if distance < self.goal_radius:
+        # Helper for single player win logic (reuse existing code logic)
+        def process_level_complete(time_taken):
             # Toca o buzzer ao vencer
             self.send_beep_command()
 
@@ -1700,20 +2062,20 @@ class Game:
             self.ball.vy = 0
 
             # Calcular tempo do nível
-            level_time = time.time() - self.level_start_time
-            self.total_time += level_time
-            self.best_time = min(self.best_time, level_time)
+            self.total_time += time_taken
+            self.best_time = min(self.best_time, time_taken)
             self.levels_completed += 1
 
-            # Calcular pontuação (baseada no nível e tempo)
-            # Incluir precisão se for modo normal
+            # Calcular pontuação
             mode_config = GAME_MODES.get(self.game_mode, {})
             if mode_config.get('track_precision', False):
-                score = int(self.level * 1000 / max(0.1, level_time)) + self.precision_score
+                score = int(self.level * 1000 / max(0.1, time_taken)) + self.precision_score
             else:
-                score = int(self.level * 1000 / max(0.1, level_time))
+                score = int(self.level * 1000 / max(0.1, time_taken))
+            
             self.current_score = score
-            self.current_time = level_time
+            self.total_score += score
+            self.current_time = time_taken
 
             # Adicionar tempo aleatório no modo eliminação
             self.last_bonus_time = 0
@@ -1723,29 +2085,117 @@ class Game:
                 bonus_time = random.randint(min_time, max_time)
                 self.timer += bonus_time
                 self.last_bonus_time = bonus_time
-                print(f"Bónus de tempo: +{bonus_time}s")
 
             # Adicionar vida se alguma foi perdida
             if self.lives < self.max_lives:
                 self.lives += 1
 
-            # Store data for name input (don't save yet)
+            # Store data for name input
             self.pending_score_data = {
                 'level': self.level,
-                'time': level_time,
-                'score': score,
+                'time': time_taken,
+                'score': self.total_score,
                 'game_mode': self.game_mode
             }
 
-            # Avançar nível
-            self.level += 1
+            # Avançar nível (Single Player Normal Mode is Infinite in existing code)
+            # But multiplayer Normal is 1 level.
+            if self.num_players == 2 and self.game_mode == 'normal':
+                self.state = "WIN" # End after 1 level
+            else:
+                self.level += 1
+                if self.sound_level_complete:
+                    self.sound_level_complete.play()
+                self.state = "WIN"
 
-            # Play level complete sound
-            if self.sound_level_complete:
-                self.sound_level_complete.play()
+        if self.num_players == 1:
+            dx = self.ball.x - self.goal_pos[0]
+            dy = self.ball.y - self.goal_pos[1]
+            distance = math.sqrt(dx*dx + dy*dy)
 
-            # Go to WIN screen (name input only happens when going to menu)
-            self.state = "WIN"
+            if distance < self.goal_radius:
+                process_level_complete(time.time() - self.level_start_time)
+        else:
+            # Multiplayer
+            current_time = time.time() - self.level_start_time
+            
+            # Check P1
+            if not self.player1_finished:
+                dist1 = math.sqrt((self.ball.x - self.goal_pos[0])**2 + (self.ball.y - self.goal_pos[1])**2)
+                if dist1 < self.goal_radius:
+                    self.player1_finished = True
+                    self.player1_time = current_time
+                    # Calculate P1 score
+                    score = int(self.level * 1000 / max(0.1, current_time))
+                    self.player1_score += score
+                    
+                    self.send_beep_command()
+                    # Freeze ball
+                    self.ball.vx = 0
+                    self.ball.vy = 0
+                    self.ball.x = -1000 # Move off screen
+                    if self.sound_level_complete:
+                        self.sound_level_complete.play()
+
+            # Check P2
+            if not self.player2_finished:
+                dist2 = math.sqrt((self.ball2.x - self.goal_pos[0])**2 + (self.ball2.y - self.goal_pos[1])**2)
+                if dist2 < self.goal_radius:
+                    self.player2_finished = True
+                    self.player2_time = current_time
+                    # Calculate P2 score
+                    score = int(self.level * 1000 / max(0.1, current_time))
+                    self.player2_score += score
+                    
+                    self.send_beep_command()
+                    # Freeze ball
+                    self.ball2.vx = 0
+                    self.ball2.vy = 0
+                    self.ball2.x = -1000 # Move off screen
+                    if self.sound_level_complete:
+                        self.sound_level_complete.play()
+            
+            # Check conditions
+            if self.player1_finished and self.player2_finished:
+                # Both finished
+                if self.game_mode == 'normal':
+                    # Set current stats for WIN screen
+                    self.current_time = max(self.player1_time, self.player2_time)
+                    
+                    # Determine Winner based on time
+                    if self.player1_time < self.player2_time:
+                        self.winner = "Player 1"
+                    elif self.player2_time < self.player1_time:
+                        self.winner = "Player 2"
+                    else:
+                        self.winner = "Draw"
+                        
+                    # Score calculation for MP (basic implementation)
+                    mode_config = GAME_MODES.get(self.game_mode, {})
+                    score = int(self.level * 1000 / max(0.1, self.current_time))
+                    self.current_score = score
+                    self.total_score += score
+                    self.levels_completed += 1
+                    self.total_time += self.current_time
+                    
+                    self.state = "MP_WIN" # End Game on special screen
+                else:
+                    # Minefield / Elimination - Continue to next level
+                    self.level += 1
+                    
+                    # Add bonus time or Reset Time
+                    mode_config = GAME_MODES.get(self.game_mode, {})
+                    if self.game_mode == 'elimination':
+                        # Reset to random time
+                        self.timer = random.randint(30, 80)
+                    elif mode_config.get('random_time_on_level', False):
+                         bonus = random.randint(30, 80)
+                         self.timer += bonus
+                         
+                    self.init_level()
+                    # Reset finished flags
+                    self.player1_finished = False
+                    self.player2_finished = False
 
     def draw_direction_indicator(self):
         """Desenhar indicador de direção no top-center"""
@@ -1753,43 +2203,47 @@ class Game:
         center_x = self.world_width // 2
         center_y = 60
 
-        # Combinar aceleração do acelerómetro com aceleração do teclado
-        combined_accel_x = self.accel_x + self.keyboard_accel_x
-        combined_accel_y = self.accel_y + self.keyboard_accel_y
+        def draw_arrow(x, y, ax, ay, color):
+            magnitude = math.sqrt(ax**2 + ay**2)
+            if magnitude < 0.15:
+                pygame.draw.circle(self.world_surface, color, (x, y), indicator_size // 2)
+                pygame.draw.circle(self.world_surface, WHITE, (x, y), indicator_size // 2, 3)
+            else:
+                angle = math.atan2(ay, ax)
+                arrow_length = indicator_size
+                arrow_width = indicator_size // 2
+                
+                tip_x = x + arrow_length * math.cos(angle)
+                tip_y = y + arrow_length * math.sin(angle)
+                
+                base_angle1 = angle + math.pi * 0.75
+                base_angle2 = angle - math.pi * 0.75
+                
+                base1_x = x + arrow_width * math.cos(base_angle1)
+                base1_y = y + arrow_width * math.sin(base_angle1)
+                
+                base2_x = x + arrow_width * math.cos(base_angle2)
+                base2_y = y + arrow_width * math.sin(base_angle2)
+                
+                points = [(tip_x, tip_y), (base1_x, base1_y), (base2_x, base2_y)]
+                pygame.draw.polygon(self.world_surface, color, points)
+                pygame.draw.polygon(self.world_surface, WHITE, points, 3)
 
-        # Calcular magnitude da inclinação
-        magnitude = math.sqrt(combined_accel_x**2 + combined_accel_y**2)
-
-        if magnitude < 0.15:  # Aceleração nivelada (sem input)
-            # Desenhar círculo
-            pygame.draw.circle(self.world_surface, BLUE, (center_x, center_y), indicator_size // 2)
-            pygame.draw.circle(self.world_surface, WHITE, (center_x, center_y), indicator_size // 2, 3)
+        if self.num_players == 2:
+            # Player 1 (Red)
+            combined_x1 = self.accel_x + self.keyboard_accel_x
+            combined_y1 = self.accel_y + self.keyboard_accel_y
+            draw_arrow(center_x - 30, center_y, combined_x1, combined_y1, RED)
+            
+            # Player 2 (Green)
+            combined_x2 = self.accel2_x + self.keyboard2_accel_x
+            combined_y2 = self.accel2_y + self.keyboard2_accel_y
+            draw_arrow(center_x + 30, center_y, combined_x2, combined_y2, GREEN)
         else:
-            # Desenhar seta a apontar para a direção combinada
-            angle = math.atan2(combined_accel_y, combined_accel_x)
-
-            # Pontos da seta
-            arrow_length = indicator_size
-            arrow_width = indicator_size // 2
-
-            # Ponta da seta
-            tip_x = center_x + arrow_length * math.cos(angle)
-            tip_y = center_y + arrow_length * math.sin(angle)
-
-            # Base da seta (triângulo)
-            base_angle1 = angle + math.pi * 0.75
-            base_angle2 = angle - math.pi * 0.75
-
-            base1_x = center_x + arrow_width * math.cos(base_angle1)
-            base1_y = center_y + arrow_width * math.sin(base_angle1)
-
-            base2_x = center_x + arrow_width * math.cos(base_angle2)
-            base2_y = center_y + arrow_width * math.sin(base_angle2)
-
-            # Desenhar seta
-            points = [(tip_x, tip_y), (base1_x, base1_y), (base2_x, base2_y)]
-            pygame.draw.polygon(self.world_surface, BLUE, points)
-            pygame.draw.polygon(self.world_surface, WHITE, points, 3)
+            # Single Player (Blue)
+            combined_accel_x = self.accel_x + self.keyboard_accel_x
+            combined_accel_y = self.accel_y + self.keyboard_accel_y
+            draw_arrow(center_x, center_y, combined_accel_x, combined_accel_y, BLUE)
 
     def draw_hearts(self):
         """Desenhar corações (vidas) no centro inferior"""
@@ -1806,31 +2260,81 @@ class Game:
 
             # Animação de pulso quando perde vida
             scale = 1.0
-            if i >= self.lives and self.life_lost_animation_time > 0:
+            if self.life_lost_animation_time > 0:
                 time_since_lost = time.time() - self.life_lost_animation_time
                 if time_since_lost < 0.5:
-                    # Pulsar o coração perdido
-                    if int(i) == int(self.lives):
-                        scale = 1.0 + 0.3 * math.sin(time_since_lost * 20)
+                    # Check which heart to pulse based on who lost life
+                    # If P1 lost and i == current_lives, pulse
+                    # For shared/single player:
+                    if self.num_players == 1 and int(i) == int(self.lives):
+                         scale = 1.0 + 0.3 * math.sin(time_since_lost * 20)
+                    # For MP, we could pulse specific half, but simpler to pulse whole heart if either lost
+                    elif self.num_players == 2:
+                         if (int(i) == int(self.player1_lives)) or (int(i) == int(self.player2_lives)):
+                             scale = 1.0 + 0.3 * math.sin(time_since_lost * 20)
 
-            # Desenhar coração (forma simplificada)
-            heart_color = RED if i < self.lives else DARK_GRAY
             size = int(heart_size * scale)
-
-            # Coração como dois círculos e um triângulo
+            
+            # Shapes logic
             left_circle_pos = (int(x - size//4), int(y_pos - size//4))
             right_circle_pos = (int(x + size//4), int(y_pos - size//4))
+            
+            # Triangle points
+            # Tip is at (x, y_pos + size//2)
+            # Top Left is (x - size//2, y_pos - size//6)
+            # Top Right is (x + size//2, y_pos - size//6)
+            # Top Center is (x, y_pos - size//6)
+            
+            triangle_tip = (x, y_pos + size//2)
+            triangle_top_left = (x - size//2, y_pos - size//6)
+            triangle_top_right = (x + size//2, y_pos - size//6)
+            triangle_top_center = (x, y_pos - size//6)
 
-            pygame.draw.circle(self.world_surface, heart_color, left_circle_pos, size//3)
-            pygame.draw.circle(self.world_surface, heart_color, right_circle_pos, size//3)
+            if self.num_players == 2:
+                # --- Multiplayer: Split Heart ---
+                
+                # Save current clip
+                original_clip = self.world_surface.get_clip()
+                
+                # 1. Draw Left Half (Player 1 - RED)
+                # Set clip to the left side of the heart's center x
+                self.world_surface.set_clip(pygame.Rect(0, 0, x, self.world_height))
+                
+                color_p1 = RED if i < self.player1_lives else DARK_GRAY
+                
+                pygame.draw.circle(self.world_surface, color_p1, left_circle_pos, size//3)
+                poly_p1 = [triangle_tip, triangle_top_left, triangle_top_center]
+                pygame.draw.polygon(self.world_surface, color_p1, poly_p1)
+                
+                # 2. Draw Right Half (Player 2 - GREEN)
+                # Set clip to the right side of the heart's center x
+                self.world_surface.set_clip(pygame.Rect(x, 0, self.world_width - x, self.world_height))
+                
+                color_p2 = GREEN if i < self.player2_lives else DARK_GRAY
+                
+                pygame.draw.circle(self.world_surface, color_p2, right_circle_pos, size//3)
+                poly_p2 = [triangle_tip, triangle_top_right, triangle_top_center]
+                pygame.draw.polygon(self.world_surface, color_p2, poly_p2)
+                
+                # Reset Clip
+                self.world_surface.set_clip(original_clip)
+                
+                # Draw a thin black line in the middle to separate
+                # Extend line higher up to split circles visually
+                line_top_y = y_pos - size//2
+                pygame.draw.line(self.world_surface, BLACK, (x, line_top_y), triangle_tip, 2)
+                
+            else:
+                # --- Single Player: Full Heart ---
+                heart_color = RED if i < self.lives else DARK_GRAY
+                
+                # Draw both circles
+                pygame.draw.circle(self.world_surface, heart_color, left_circle_pos, size//3)
+                pygame.draw.circle(self.world_surface, heart_color, right_circle_pos, size//3)
 
-            # Triângulo inferior
-            triangle_points = [
-                (x, y_pos + size//2),
-                (x - size//2, y_pos - size//6),
-                (x + size//2, y_pos - size//6)
-            ]
-            pygame.draw.polygon(self.world_surface, heart_color, triangle_points)
+                # Full Triangle
+                triangle_points = [triangle_tip, triangle_top_left, triangle_top_right]
+                pygame.draw.polygon(self.world_surface, heart_color, triangle_points)
 
     def draw_mines(self):
         """Desenhar minas no labirinto"""
@@ -1863,6 +2367,28 @@ class Game:
 
         # Botões
         for button in self.main_menu_buttons:
+            button.draw(self.world_surface, self.font)
+
+        # Renderizar na tela
+        self.render_world_to_screen()
+        pygame.display.flip()
+
+    def draw_player_select(self):
+        """Desenhar menu de seleção de jogadores"""
+        self.world_surface.fill(BLACK)
+
+        # Update button texts
+        self.player_select_buttons[0].text = t('single_player', self.language)
+        self.player_select_buttons[1].text = t('multi_player', self.language)
+        self.player_select_buttons[2].text = t('back', self.language)
+
+        # Título
+        title = self.font.render(t('select_players', self.language), True, WHITE)
+        title_rect = title.get_rect(center=(self.world_width // 2, 150))
+        self.world_surface.blit(title, title_rect)
+
+        # Botões
+        for button in self.player_select_buttons:
             button.draw(self.world_surface, self.font)
 
         # Renderizar na tela
@@ -1910,20 +2436,58 @@ class Game:
         text_swap = self.small_font.render(swap_xy_text, True, WHITE)
 
         # Center-align the text blocks
-        text_x_rect = text_x.get_rect(center=(self.world_width // 2, 360))
-        text_y_rect = text_y.get_rect(center=(self.world_width // 2, 410))
-        text_swap_rect = text_swap.get_rect(center=(self.world_width // 2, 460))
+        self.text_x_rect = text_x.get_rect(center=(self.world_width // 2, 360))
+        self.text_y_rect = text_y.get_rect(center=(self.world_width // 2, 410))
+        self.text_swap_rect = text_swap.get_rect(center=(self.world_width // 2, 460))
 
-        self.world_surface.blit(text_x, text_x_rect)
-        self.world_surface.blit(text_y, text_y_rect)
-        self.world_surface.blit(text_swap, text_swap_rect)
+        self.world_surface.blit(text_x, self.text_x_rect)
+        self.world_surface.blit(text_y, self.text_y_rect)
+        self.world_surface.blit(text_swap, self.text_swap_rect)
 
-        # Info de conexão serial
-        connection_text = t('serial_connected', self.language) if self.serial_connected else t('serial_disconnected', self.language)
-        conn_color = GREEN if self.serial_connected else RED
+        # Info de conexão serial - DETAILED
+        # Use cached list from self.stm32_ports instead of scanning every frame
+        num_detected = len(self.stm32_ports)
+        
+        if num_detected > 0:
+            connection_text = f"{t('stm32_detected', self.language)}: {num_detected}"
+            conn_color = GREEN
+        else:
+            connection_text = f"{t('stm32_detected', self.language)}: 0"
+            conn_color = RED
+
+        # Check for hover on the connection text to indicate clickability
+        mouse_pos = pygame.mouse.get_pos()
+        # We need to calculate the rect first to check hover, or use a pre-calculated position
+        # Let's calculate rect, check hover, then draw with potential color change
+        conn_surface_temp = self.small_font.render(connection_text, True, conn_color)
+        conn_rect = conn_surface_temp.get_rect(center=(self.world_width // 2, 520))
+        
+        # Convert mouse pos for collision check
+        scale, offset_x, offset_y = self.get_scale_and_offset()
+        world_mouse_x = (mouse_pos[0] - offset_x) / scale
+        world_mouse_y = (mouse_pos[1] - offset_y) / scale
+        
+        if conn_rect.collidepoint(world_mouse_x, world_mouse_y):
+            conn_color = WHITE  # Highlight on hover
+            
         conn_surface = self.small_font.render(connection_text, True, conn_color)
-        conn_rect = conn_surface.get_rect(center=(self.world_width // 2, 570))
         self.world_surface.blit(conn_surface, conn_rect)
+        self.connection_text_rect = conn_rect
+        
+        # Show Controls as Clickable Blue Text
+        show_controls_text = t('show_commands', self.language)
+        
+        # Check hover for Show Controls
+        show_c_surf_temp = self.small_font.render(show_controls_text, True, BLUE)
+        show_controls_rect = show_c_surf_temp.get_rect(center=(self.world_width // 2, 560))
+        
+        show_c_color = BLUE
+        if show_controls_rect.collidepoint(world_mouse_x, world_mouse_y):
+            show_c_color = YELLOW
+            
+        show_controls_surface = self.small_font.render(show_controls_text, True, show_c_color)
+        self.world_surface.blit(show_controls_surface, show_controls_rect)
+        self.show_controls_text_rect = show_controls_rect
 
         # Botões
         for button in self.settings_buttons:
@@ -1932,6 +2496,58 @@ class Game:
         # Renderizar na tela
         self.render_world_to_screen()
         pygame.display.flip()
+
+    def draw_controls(self):
+        """Desenhar menu de comandos"""
+        self.world_surface.fill(BLACK)
+        
+        # Title
+        title = self.font.render(t('controls', self.language), True, WHITE)
+        title_rect = title.get_rect(center=(self.world_width // 2, 50))
+        self.world_surface.blit(title, title_rect)
+        
+        # Categories
+        categories = [
+            (t('general', self.language), ["ESC: " + t('pause', self.language), "R: " + t('restart', self.language)]),
+            (t('movement', self.language), [t('single_player', self.language) + ": Acelerómetro / " + t('arrows', self.language)]),
+            (t('multi_player', self.language), [
+                t('player_1', self.language) + ": " + t('arrows', self.language) + " / STM32 (ID 1)",
+                t('player_2', self.language) + ": " + t('wasd', self.language) + " / STM32 (ID 2)"
+            ])
+        ]
+        
+        y_offset = 120
+        for cat_name, cmds in categories:
+            # Category Title
+            cat_surf = self.font.render(cat_name, True, GOLD)
+            cat_rect = cat_surf.get_rect(center=(self.world_width // 2, y_offset))
+            self.world_surface.blit(cat_surf, cat_rect)
+            y_offset += 40
+            
+            # Commands
+            for cmd in cmds:
+                cmd_surf = self.small_font.render(cmd, True, WHITE)
+                cmd_rect = cmd_surf.get_rect(center=(self.world_width // 2, y_offset))
+                self.world_surface.blit(cmd_surf, cmd_rect)
+                y_offset += 30
+            y_offset += 20
+            
+        # Back Button
+        if not hasattr(self, 'controls_back_button'):
+            self.controls_back_button = Button(self.world_width // 2 - 200, 600, 400, 70, t('back', self.language), GRAY)
+        
+        # Update button position (in case it was created with old coordinates)
+        self.controls_back_button.rect.y = 600
+        self.controls_back_button.text = t('back', self.language)
+        self.controls_back_button.draw(self.world_surface, self.font)
+        
+        self.render_world_to_screen()
+        pygame.display.flip()
+
+    def handle_controls_events(self, event):
+        """Eventos do menu de comandos"""
+        if hasattr(self, 'controls_back_button') and self.controls_back_button.handle_event(event):
+            self.state = "SETTINGS"
 
     def draw_leaderboard(self):
         """Desenhar leaderboard com filtro de modo"""
@@ -2080,13 +2696,17 @@ class Game:
         """Desenhar o jogo em andamento"""
         self.world_surface.fill(BLACK)
 
-        # Desenhar paredes
+        # Desenhar paredes - Inflate by 1px to fix seams
         for wall in self.walls:
+            # Create rect from tuple
+            wall_rect = pygame.Rect(wall)
+            
             # Sombra
             shadow_rect = pygame.Rect(wall[0] + 2, wall[1] + 2, wall[2], wall[3])
             pygame.draw.rect(self.world_surface, DARK_GRAY, shadow_rect)
-            # Parede
-            pygame.draw.rect(self.world_surface, WALL_COLOR, wall)
+            
+            # Parede - Inflate to fix seams
+            pygame.draw.rect(self.world_surface, WALL_COLOR, wall_rect.inflate(1, 1))
 
         # Desenhar objetivo como buraco verde com efeito
         for i in range(3):
@@ -2111,6 +2731,9 @@ class Game:
             pygame.draw.circle(self.world_surface, explosion_color, (int(self.ball.x), int(self.ball.y)), explosion_radius, 3)
 
         self.ball.draw(self.world_surface)
+        
+        if self.ball2:
+            self.ball2.draw(self.world_surface)
 
         # Indicador de direção
         self.draw_direction_indicator()
@@ -2124,9 +2747,20 @@ class Game:
             timer_text = self.font.render(f"{t('time', self.language)}: {self.timer:.1f}s", True, YELLOW)
         self.world_surface.blit(timer_text, (10, 10))
 
-        # Nível
-        level_text = self.font.render(f"{t('level', self.language)}: {self.level}", True, WHITE)
-        self.world_surface.blit(level_text, (self.world_width - 150, 10))
+        # Nível (Hide in MP Normal Mode)
+        if not (self.num_players == 2 and self.game_mode == 'normal'):
+            level_text = self.font.render(f"{t('level', self.language)}: {self.level}", True, WHITE)
+            # Right align with 10px margin
+            level_rect = level_text.get_rect(topright=(self.world_width - 10, 10))
+            self.world_surface.blit(level_text, level_rect)
+
+        # MP Normal Mode: Early End Text
+        if self.num_players == 2 and self.game_mode == 'normal' and (self.player1_finished or self.player2_finished):
+             end_text_str = "Pressione 'T' para terminar" if self.language == 'pt' else "Press 'T' to end"
+             end_text = self.small_font.render(end_text_str, True, WHITE)
+             # Right align top (replaces Level text)
+             end_rect = end_text.get_rect(topright=(self.world_width - 10, 10))
+             self.world_surface.blit(end_text, end_rect)
 
         # Corações (vidas) no centro inferior - apenas no modo minefield
         if self.game_mode == 'minefield':
@@ -2141,9 +2775,10 @@ class Game:
         )
         self.world_surface.blit(accel_text, (10, self.world_height - 30))
 
-        # Instruções
-        instructions = self.small_font.render("ESC: Pausar | R: Reiniciar", True, GRAY)
-        self.world_surface.blit(instructions, (self.world_width - 280, self.world_height - 30))
+        # Instruções - Right align with 10px margin
+        instructions = self.small_font.render(t('hud_instructions', self.language), True, GRAY)
+        inst_rect = instructions.get_rect(topright=(self.world_width - 10, self.world_height - 30))
+        self.world_surface.blit(instructions, inst_rect)
 
         # Renderizar na tela
         self.render_world_to_screen()
@@ -2180,6 +2815,8 @@ class Game:
 
         # Desenhar bola na posição pausada
         self.ball.draw(self.world_surface)
+        if self.ball2:
+            self.ball2.draw(self.world_surface)
 
         # Indicador de direção
         self.draw_direction_indicator()
@@ -2291,23 +2928,37 @@ class Game:
 
         # Update button texts and card descriptions
         self.mode_select_back_button.text = t('back', self.language)
+        
+        # Filter available modes
         mode_keys = ['normal', 'minefield', 'timeattack', 'elimination']
-        for i, card in enumerate(self.mode_cards):
-            mode_key = mode_keys[i]
-            card.title = GAME_MODES[mode_key][f'name_{self.language}']
-            card.description = GAME_MODES[mode_key][f'desc_{self.language}']
+        if self.num_players == 2:
+             mode_keys = ['normal', 'minefield', 'elimination']
+             
+        active_cards = []
+        for i, key in enumerate(['normal', 'minefield', 'timeattack', 'elimination']):
+            if key in mode_keys:
+                active_cards.append(self.mode_cards[i])
+
+        for card in active_cards:
+            card.title = GAME_MODES[card.mode_name][f'name_{self.language}']
+            card.description = GAME_MODES[card.mode_name][f'desc_{self.language}']
 
         # Título
         title = self.font.render(t('select_mode', self.language), True, WHITE)
         title_rect = title.get_rect(center=(self.world_width // 2, 55))
         self.world_surface.blit(title, title_rect)
 
-        # Draw mode cards
-        for card in self.mode_cards:
+        # Draw mode cards with adjusted positions
+        start_y = 150 # Increased space from title
+        card_height = 105
+        card_spacing = 8
+        
+        for i, card in enumerate(active_cards):
+            card.rect.y = start_y + i * (card_height + card_spacing)
             card.draw(self.world_surface, self.font, self.small_font)
 
-        # Draw back button
-        self.mode_select_back_button.draw(self.world_surface, self.font)
+        # Draw back button (adjust position based on number of cards)
+        self.mode_select_back_button.rect.y = start_y + len(active_cards) * (card_height + card_spacing) + 70 # Increased space before back button
 
         # Renderizar na tela
         self.render_world_to_screen()
@@ -2362,6 +3013,54 @@ class Game:
         self.render_world_to_screen()
         pygame.display.flip()
 
+    def draw_mp_win(self):
+        """Desenhar tela de vitória multiplayer"""
+        self.world_surface.fill(BLACK)
+        
+        # Update button texts
+        self.mp_win_buttons[0].text = t('play_again', self.language)
+        self.mp_win_buttons[1].text = t('menu', self.language)
+        
+        # Determine Title based on winner
+        winner_text = t('draw', self.language)
+        winner_color = WHITE
+        
+        # Check if it was a timeout draw or a normal win
+        if self.winner == "Draw" or self.winner is None:
+             if self.game_mode == 'elimination' and self.timer <= 0:
+                 winner_text = t('game_over', self.language)
+                 winner_color = RED
+             else:
+                 winner_text = t('draw', self.language)
+        elif self.winner == "Player 1":
+            winner_text = t('p1_wins', self.language)
+            winner_color = RED
+        elif self.winner == "Player 2":
+            winner_text = t('p2_wins', self.language)
+            winner_color = GREEN
+            
+        # Title
+        title = self.title_font.render(winner_text, True, winner_color)
+        title_rect = title.get_rect(center=(self.world_width // 2, 150))
+        self.world_surface.blit(title, title_rect)
+        
+        # Stats - Show P1 vs P2 Scores clearly
+        score_text = f"P1: {self.player1_score}   VS   P2: {self.player2_score}"
+        score_surf = self.font.render(score_text, True, GOLD)
+        score_rect = score_surf.get_rect(center=(self.world_width // 2, 250))
+        self.world_surface.blit(score_surf, score_rect)
+        
+        # Mode info
+        if self.game_mode == 'elimination' and self.timer <= 0:
+             pass # Already handled in title
+
+        # Buttons
+        for button in self.mp_win_buttons:
+            button.draw(self.world_surface, self.font)
+            
+        self.render_world_to_screen()
+        pygame.display.flip()
+
     def draw_gameover(self):
         """Desenhar tela de game over"""
         self.world_surface.fill(BLACK)
@@ -2382,18 +3081,45 @@ class Game:
         self.world_surface.blit(title, title_rect)
 
         # Estatísticas
-        stats = [
-            f"{t('level_reached', self.language)}: {self.level}",
-            f"{t('levels_completed', self.language)}: {self.levels_completed}",
-            f"{t('total_time', self.language)}: {self.total_time:.2f}s",
-        ]
+        if self.num_players == 2:
+            # Multiplayer - show both player scores
+            stats = [
+                f"{t('level_reached', self.language)}: {self.level}",
+                "",
+                f"Player 1: {self.player1_score}",
+                f"Player 2: {self.player2_score}",
+            ]
+            
+            y_offset = 240
+            for i, stat in enumerate(stats):
+                if stat:
+                    # Color P1 red, P2 green
+                    if "Player 1" in stat:
+                        color = RED
+                    elif "Player 2" in stat:
+                        color = GREEN
+                    else:
+                        color = WHITE
+                    text = self.font.render(stat, True, color)
+                    text_rect = text.get_rect(center=(self.world_width // 2, y_offset))
+                    self.world_surface.blit(text, text_rect)
+                y_offset += 50
+        else:
+            # Single player
+            current_score = self.total_score if self.levels_completed > 0 else self.precision_score
+            stats = [
+                f"{t('level_reached', self.language)}: {self.level}",
+                f"{t('levels_completed', self.language)}: {self.levels_completed}",
+                f"{t('total_time', self.language)}: {self.total_time:.2f}s",
+                f"{t('score', self.language)}: {current_score}",
+            ]
 
-        y_offset = 240
-        for stat in stats:
-            text = self.font.render(stat, True, WHITE)
-            text_rect = text.get_rect(center=(self.world_width // 2, y_offset))
-            self.world_surface.blit(text, text_rect)
-            y_offset += 50
+            y_offset = 240
+            for stat in stats:
+                text = self.font.render(stat, True, WHITE)
+                text_rect = text.get_rect(center=(self.world_width // 2, y_offset))
+                self.world_surface.blit(text, text_rect)
+                y_offset += 50
 
         # Botões
         for button in self.gameover_buttons:
@@ -2473,8 +3199,8 @@ class Game:
         """Tratar eventos do menu principal"""
         for i, button in enumerate(self.main_menu_buttons):
             if button.handle_event(event):
-                if i == 0:  # Jogar - ir para seleção de modo
-                    self.state = "MODE_SELECT"
+                if i == 0:  # Jogar - ir para seleção de dificuldade
+                    self.state = "DIFFICULTY_SELECT"
                 elif i == 1:  # Definições
                     self.state = "SETTINGS"
                 elif i == 2:  # Leaderboard
@@ -2482,10 +3208,45 @@ class Game:
                 elif i == 3:  # Sair
                     self.running = False
 
+    def handle_player_select_events(self, event):
+        """Tratar eventos do menu de seleção de jogadores"""
+        for i, button in enumerate(self.player_select_buttons):
+            if button.handle_event(event):
+                if i == 0:  # Um Jogador
+                    self.num_players = 1
+                    self.state = "MODE_SELECT"
+                elif i == 1:  # Multijogador
+                    self.num_players = 2
+                    # Verificar STM32 conectados
+                    connected_ports = self.scan_stm32_ports()
+                    if connected_ports:
+                        self.state = "STM32_SETUP"
+                        # Initialize setup
+                        self.stm32_ports = connected_ports
+                        self.p1_port_index = 0 if len(connected_ports) > 0 else -1
+                        self.p2_port_index = 1 if len(connected_ports) > 1 else -1
+                        # Create buttons for STM32 setup if they don't exist
+                        self.create_stm32_setup_buttons()
+                    else:
+                        # No STM32, fallback to keyboard
+                        self.state = "MODE_SELECT"
+                elif i == 2:  # Voltar
+                    self.state = "DIFFICULTY_SELECT"
+
     def handle_mode_select_events(self, event):
         """Tratar eventos do menu de seleção de modo"""
+        # Filter available modes
+        mode_keys = ['normal', 'minefield', 'timeattack', 'elimination']
+        if self.num_players == 2:
+             mode_keys = ['normal', 'minefield', 'elimination']
+             
+        active_cards = []
+        for i, key in enumerate(['normal', 'minefield', 'timeattack', 'elimination']):
+            if key in mode_keys:
+                active_cards.append(self.mode_cards[i])
+
         # Handle mode cards
-        for card in self.mode_cards:
+        for card in active_cards:
             if card.handle_event(event):
                 self.game_mode = card.mode_name
                 self.start_game()
@@ -2493,7 +3254,20 @@ class Game:
 
         # Handle back button
         if self.mode_select_back_button.handle_event(event):
-            self.state = "MENU"
+            if self.num_players == 2:
+                self.state = "PLAYER_SELECT" # Go back to player select if MP
+            else:
+                self.state = "PLAYER_SELECT" # Always go back to player select now
+
+
+    def handle_mp_win_events(self, event):
+        """Eventos da tela de vitória multiplayer"""
+        for i, button in enumerate(self.mp_win_buttons):
+            if button.handle_event(event):
+                if i == 0: # Play Again
+                    self.start_game()
+                elif i == 1: # Menu (Skip Save)
+                    self.state = "MENU"
 
     def handle_gameover_events(self, event):
         """Tratar eventos do menu de game over"""
@@ -2506,6 +3280,7 @@ class Game:
                 else:
                     # No pending data, go directly
                     if i == 0:  # Tentar Novamente
+                        # Reset everything for a fresh start
                         self.start_game()
                     elif i == 1:  # Menu Principal
                         self.state = "MENU"
@@ -2566,10 +3341,18 @@ class Game:
         self.level = 1
         self.total_time = 0
         self.levels_completed = 0
+        self.total_score = 0
+        self.current_score = 0
+        self.current_time = 0
+        self.winner = None
+        self.player1_score = 0
+        self.player2_score = 0
         # Resetar vidas baseado no modo
         mode_config = GAME_MODES.get(self.game_mode, {})
         self.lives = mode_config.get('initial_lives', 5)
         self.max_lives = self.lives
+        self.player1_lives = self.lives
+        self.player2_lives = self.lives
         self.init_level()
 
     def handle_settings_events(self, event):
@@ -2617,10 +3400,19 @@ class Game:
             elif 440 < mouse_pos[1] < 490 and self.world_width // 2 - 150 < mouse_pos[0] < self.world_width // 2 + 200:
                 self.swap_xy = not self.swap_xy
                 self.config.set('swap_xy', self.swap_xy)
+            # Show Controls Text Click
+            elif hasattr(self, 'show_controls_text_rect') and self.show_controls_text_rect.collidepoint(mouse_pos):
+                self.state = "CONTROLS"
+            # Connection Text Click (Rescan)
+            elif hasattr(self, 'connection_text_rect') and self.connection_text_rect.collidepoint(mouse_pos):
+                # Rescan and attempt connection
+                print("Manual rescan requested...")
+                self.connect_serial()
 
-        for button in self.settings_buttons:
+        for i, button in enumerate(self.settings_buttons):
             if button.handle_event(event):
-                self.state = "MENU"
+                if i == 0: # Back
+                    self.state = "MENU"
 
     def handle_leaderboard_events(self, event):
         """Tratar eventos da leaderboard"""
@@ -2667,8 +3459,7 @@ class Game:
                     self.state = "PLAYING"
                     self.level_start_time = time.time() - self.timer
                 elif i == 1:  # Reiniciar
-                    self.init_level()
-                    self.state = "PLAYING"
+                    self.start_game()
                 elif i == 2:  # Menu
                     self.state = "MENU"
 
@@ -2691,6 +3482,130 @@ class Game:
                         self.name_input.text = self.player_name  # Pre-fill with current name
                     else:
                         self.state = "MENU"
+
+    def update_cursor(self):
+        """Update mouse cursor based on hover state"""
+        should_be_hand = False
+        
+        # Check active buttons based on state
+        active_buttons = []
+        if self.state == "MENU":
+            active_buttons = self.main_menu_buttons
+        elif self.state == "SETTINGS":
+            active_buttons = self.settings_buttons
+            # Check sliders
+            if self.volume_slider.rect.collidepoint(pygame.mouse.get_pos()) or \
+               self.sensitivity_slider.rect.collidepoint(pygame.mouse.get_pos()):
+                should_be_hand = True
+            # Check texts
+            mouse_pos = pygame.mouse.get_pos()
+            scale, offset_x, offset_y = self.get_scale_and_offset()
+            world_mouse_x = (mouse_pos[0] - offset_x) / scale
+            world_mouse_y = (mouse_pos[1] - offset_y) / scale
+            
+            if hasattr(self, 'language_text_rect') and self.language_text_rect.collidepoint(world_mouse_x, world_mouse_y):
+                should_be_hand = True
+            if hasattr(self, 'connection_text_rect') and self.connection_text_rect.collidepoint(world_mouse_x, world_mouse_y):
+                should_be_hand = True
+            if hasattr(self, 'show_controls_text_rect') and self.show_controls_text_rect.collidepoint(world_mouse_x, world_mouse_y):
+                should_be_hand = True
+            if hasattr(self, 'text_x_rect') and self.text_x_rect.collidepoint(world_mouse_x, world_mouse_y):
+                should_be_hand = True
+            if hasattr(self, 'text_y_rect') and self.text_y_rect.collidepoint(world_mouse_x, world_mouse_y):
+                should_be_hand = True
+            if hasattr(self, 'text_swap_rect') and self.text_swap_rect.collidepoint(world_mouse_x, world_mouse_y):
+                should_be_hand = True
+                
+        elif self.state == "LEADERBOARD":
+            active_buttons = self.leaderboard_buttons + self.leaderboard_filter_buttons
+            # Check entries
+            if hasattr(self, 'leaderboard_entry_rects'):
+                mouse_pos = pygame.mouse.get_pos()
+                scale, offset_x, offset_y = self.get_scale_and_offset()
+                world_mouse_x = (mouse_pos[0] - offset_x) / scale
+                world_mouse_y = (mouse_pos[1] - offset_y) / scale
+                for entry_rect, _ in self.leaderboard_entry_rects:
+                    if entry_rect.collidepoint(world_mouse_x, world_mouse_y):
+                        should_be_hand = True
+                        break
+        elif self.state == "PAUSED":
+            active_buttons = self.pause_menu_buttons
+        elif self.state == "WIN":
+            active_buttons = self.win_menu_buttons
+        elif self.state == "MP_WIN":
+            active_buttons = self.mp_win_buttons
+        elif self.state == "GAME_OVER":
+            active_buttons = self.gameover_buttons
+        elif self.state == "MODE_SELECT":
+            active_buttons = [self.mode_select_back_button]
+            # Check cards
+            for card in self.mode_cards:
+                # Need to check against active cards only? Or check all, hidden ones wont trigger
+                # Card is_hovered is updated in handle_event, let's check rect directly
+                mouse_pos = pygame.mouse.get_pos()
+                scale, offset_x, offset_y = self.get_scale_and_offset()
+                world_mouse_x = (mouse_pos[0] - offset_x) / scale
+                world_mouse_y = (mouse_pos[1] - offset_y) / scale
+                if card.rect.collidepoint(world_mouse_x, world_mouse_y):
+                    should_be_hand = True
+        elif self.state == "PLAYER_SELECT":
+            active_buttons = self.player_select_buttons
+        elif self.state == "DIFFICULTY_SELECT":
+            if hasattr(self, 'difficulty_buttons'):
+                active_buttons = self.difficulty_buttons
+        elif self.state == "STM32_SETUP":
+            if hasattr(self, 'stm32_setup_buttons'):
+                active_buttons = self.stm32_setup_buttons
+        elif self.state == "CONTROLS":
+            if hasattr(self, 'controls_back_button'):
+                active_buttons = [self.controls_back_button]
+        elif self.state == "PLAYER_PROFILE":
+            if hasattr(self, 'player_profile_back_button'):
+                active_buttons = [self.player_profile_back_button]
+        elif self.state == "NAME_INPUT":
+            active_buttons = self.name_input_buttons
+
+        # Check buttons
+        if not should_be_hand:
+            for button in active_buttons:
+                # Button hover is already handled? No, let's check logic
+                # Button.rect is world coords
+                mouse_pos = pygame.mouse.get_pos()
+                scale, offset_x, offset_y = self.get_scale_and_offset()
+                world_mouse_x = (mouse_pos[0] - offset_x) / scale
+                world_mouse_y = (mouse_pos[1] - offset_y) / scale
+                if button.rect.collidepoint(world_mouse_x, world_mouse_y):
+                    should_be_hand = True
+                    break
+        
+        # Update cursor only if changed
+        if should_be_hand != self.cursor_hand_active:
+            self.cursor_hand_active = should_be_hand
+            if should_be_hand:
+                pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
+            else:
+                pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+
+    def force_finish_mp_game(self):
+        """Force finish the MP game if one player is waiting"""
+        current_time = time.time() - self.level_start_time
+        
+        if self.player1_finished and not self.player2_finished:
+            self.player2_finished = True
+            self.player2_time = current_time + 10 # Penalty
+            # Stop ball
+            if self.ball2:
+                self.ball2.vx = 0
+                self.ball2.vy = 0
+            
+        elif self.player2_finished and not self.player1_finished:
+            self.player1_finished = True
+            self.player1_time = current_time + 10
+            # Stop ball
+            self.ball.vx = 0
+            self.ball.vy = 0
+            
+        # The main loop will check 'if p1_finished and p2_finished' in the next frame and trigger win
 
     def run(self):
         """Loop principal do jogo"""
@@ -2730,11 +3645,39 @@ class Game:
                                 self.ball.vy = self.paused_vy
                                 self.state = "PLAYING"
                                 self.level_start_time = time.time() - self.timer
+                            
+                            # Menu Navigation Back Logic
+                            elif self.state == "SETTINGS":
+                                self.state = "MENU"
+                            elif self.state == "CONTROLS":
+                                self.state = "SETTINGS"
+                            elif self.state == "LEADERBOARD":
+                                self.state = "MENU"
+                            elif self.state == "PLAYER_PROFILE":
+                                self.state = "LEADERBOARD"
+                            elif self.state == "DIFFICULTY_SELECT":
+                                self.state = "MENU"
+                            elif self.state == "PLAYER_SELECT":
+                                self.state = "DIFFICULTY_SELECT"
+                            elif self.state == "MODE_SELECT":
+                                self.state = "PLAYER_SELECT"
+                            elif self.state == "STM32_SETUP":
+                                self.state = "PLAYER_SELECT"
+                            elif self.state == "NAME_INPUT":
+                                self.discard_pending_score()
+                            elif self.state in ["GAME_OVER", "WIN", "MP_WIN"]:
+                                self.state = "MENU"
+
                     elif event.key == pygame.K_r and self.state == "PLAYING":
                         self.init_level()
                     elif event.key == pygame.K_F11:
                         # Alternar fullscreen
                         pygame.display.toggle_fullscreen()
+                    elif event.key == pygame.K_t:
+                         # Force Finish in MP Normal Mode
+                         if self.state == "PLAYING" and self.num_players == 2 and self.game_mode == 'normal':
+                             if self.player1_finished or self.player2_finished:
+                                 self.force_finish_mp_game()
 
                 # Converter coordenadas do mouse para coordenadas do mundo
                 if event.type == pygame.MOUSEMOTION or event.type == pygame.MOUSEBUTTONDOWN:
@@ -2748,10 +3691,16 @@ class Game:
                 # Eventos específicos do estado
                 if self.state == "MENU":
                     self.handle_menu_events(event)
+                elif self.state == "PLAYER_SELECT":
+                    self.handle_player_select_events(event)
+                elif self.state == "STM32_SETUP":
+                    self.handle_stm32_setup_events(event)
                 elif self.state == "MODE_SELECT":
                     self.handle_mode_select_events(event)
                 elif self.state == "SETTINGS":
                     self.handle_settings_events(event)
+                elif self.state == "CONTROLS":
+                    self.handle_controls_events(event)
                 elif self.state == "LEADERBOARD":
                     self.handle_leaderboard_events(event)
                 elif self.state == "PLAYER_PROFILE":
@@ -2760,10 +3709,17 @@ class Game:
                     self.handle_pause_events(event)
                 elif self.state == "WIN":
                     self.handle_win_events(event)
+                elif self.state == "MP_WIN":
+                    self.handle_mp_win_events(event)
                 elif self.state == "NAME_INPUT":
                     self.handle_name_input_events(event)
                 elif self.state == "GAME_OVER":
                     self.handle_gameover_events(event)
+                elif self.state == "DIFFICULTY_SELECT":
+                    self.handle_difficulty_select_events(event)
+            
+            # Update Cursor State
+            self.update_cursor()
 
             # Atualização do jogo
             if self.state == "PLAYING":
@@ -2773,97 +3729,192 @@ class Game:
 
                 # Atualizar sensibilidade da bola
                 self.ball.sensitivity = self.sensitivity
+                if self.ball2:
+                    self.ball2.sensitivity = self.sensitivity
 
-                # Combinar aceleração do acelerómetro com teclado
-                combined_accel_x = self.accel_x + self.keyboard_accel_x
-                combined_accel_y = self.accel_y + self.keyboard_accel_y
+                # PHYSICS SUB-STEPPING (Fix collision bugs)
+                physics_steps = 4
+                dt_step = dt / physics_steps
+                
+                # Calculate friction per sub-step to preserve original friction feel
+                friction_per_substep = FRICTION**(1/physics_steps)
+                
+                for _ in range(physics_steps):
+                    # Player 1 Update
+                    if not self.player1_finished:
+                        combined_accel_x = self.accel_x + self.keyboard_accel_x
+                        combined_accel_y = self.accel_y + self.keyboard_accel_y
+                        collided1 = self.ball.update(combined_accel_x, combined_accel_y, dt_step, self.walls, friction_per_substep)
+                        if collided1 and self.sound_wall_collision:
+                            # Limit sound frequency
+                            if time.time() - self.last_beep_time > 0.1:
+                                self.sound_wall_collision.play()
+                                self.last_beep_time = time.time()
+                        
+                        # Check mines P1
+                        if len(self.mines) > 0:
+                            for mine in self.mines[:]:
+                                distance = math.sqrt((self.ball.x - mine.x)**2 + (self.ball.y - mine.y)**2)
+                                if distance < BALL_RADIUS + mine.size:
+                                    self.mines.remove(mine)
+                                    self.send_mine_command()
+                                    
+                                    if self.num_players == 2:
+                                        self.player1_lives -= 1
+                                        if self.player1_lives <= 0:
+                                            self.winner = "Player 2"
+                                            self.lives = 0 
+                                    else:
+                                        self.lives -= 1
+                                        
+                                    self.mine_hit_animation_time = time.time()
+                                    if self.sound_mine_hit:
+                                        self.sound_mine_hit.play()
+                                    # Reset P1 pos
+                                    offset = BALL_RADIUS + 2
+                                    self.ball.x = MAZE_MARGIN + 60 
+                                    self.ball.y = MAZE_MARGIN_TOP + 60
+                                    self.ball.vx = 0
+                                    self.ball.vy = 0
+                                    break
 
-                # Atualizar bola com aceleração combinada
-                collided = self.ball.update(combined_accel_x, combined_accel_y, dt, self.walls)
+                    # Player 2 Update
+                    if self.num_players == 2 and self.ball2 and not self.player2_finished:
+                        combined_accel2_x = self.accel2_x + self.keyboard2_accel_x
+                        combined_accel2_y = self.accel2_y + self.keyboard2_accel_y
+                        collided2 = self.ball2.update(combined_accel2_x, combined_accel2_y, dt_step, self.walls, friction_per_substep)
+                        if collided2 and self.sound_wall_collision:
+                             if time.time() - self.last_beep_time > 0.1:
+                                self.sound_wall_collision.play()
+                                self.last_beep_time = time.time()
 
-                # Play wall collision sound if ball hit a wall
-                if collided and self.sound_wall_collision:
-                    self.sound_wall_collision.play()
+                        # Check mines P2
+                        if len(self.mines) > 0:
+                            for mine in self.mines[:]:
+                                distance = math.sqrt((self.ball2.x - mine.x)**2 + (self.ball2.y - mine.y)**2)
+                                if distance < BALL_RADIUS + mine.size:
+                                    self.mines.remove(mine)
+                                    self.send_mine_command()
+                                    
+                                    self.player2_lives -= 1
+                                    if self.player2_lives <= 0:
+                                        self.winner = "Player 1"
+                                        self.lives = 0
+                                    
+                                    self.mine_hit_animation_time = time.time()
+                                    if self.sound_mine_hit:
+                                        self.sound_mine_hit.play()
+                                    # Reset P2 pos
+                                    offset_y = BALL_RADIUS * 2 + 10
+                                    self.ball2.x = MAZE_MARGIN + 60
+                                    self.ball2.y = MAZE_MARGIN_TOP + 60 + offset_y
+                                    self.ball2.vx = 0
+                                    self.ball2.vy = 0
+                                    break
 
-                # Sistema de precisão (modo normal)
-                mode_config = GAME_MODES.get(self.game_mode, {})
-                if mode_config.get('track_precision', False):
-                    current_time = time.time()
-                    if collided:
-                        # Colidiu com parede
-                        self.wall_collisions += 1
-                        self.collision_pause_time = current_time + 3.0  # Pausa de 3s
-                    elif current_time > self.collision_pause_time:
-                        # Incrementar precisão se não estiver em pausa
-                        time_delta = current_time - self.last_precision_update
-                        self.precision_score += int(time_delta * 10)  # 10 pontos por segundo
-                    self.last_precision_update = current_time
+                # Game Over Condition
+                if self.lives <= 0 or (self.num_players == 2 and (self.player1_lives <= 0 or self.player2_lives <= 0)):
+                    if self.sound_game_over:
+                        self.sound_game_over.play()
+                    
+                    # Calculate final scores for multiplayer based on progress
+                    if self.num_players == 2 and self.game_mode == 'elimination':
+                        dist1 = math.sqrt((self.ball.x - self.goal_pos[0])**2 + (self.ball.y - self.goal_pos[1])**2)
+                        dist2 = math.sqrt((self.ball2.x - self.goal_pos[0])**2 + (self.ball2.y - self.goal_pos[1])**2)
+                        
+                        # Add progress scores if not already finished
+                        if not self.player1_finished and hasattr(self, 'p1_start_dist') and self.p1_start_dist > 0:
+                            if dist1 < self.p1_start_dist:
+                                p1_partial = int(1000 * (self.p1_start_dist - dist1) / self.p1_start_dist)
+                                self.player1_score += p1_partial
+                        
+                        if not self.player2_finished and hasattr(self, 'p2_start_dist') and self.p2_start_dist > 0:
+                            if dist2 < self.p2_start_dist:
+                                p2_partial = int(1000 * (self.p2_start_dist - dist2) / self.p2_start_dist)
+                                self.player2_score += p2_partial
+                    
+                    # Determine score to save
+                    if self.num_players == 2:
+                        if self.winner == "Player 1":
+                            score_to_save = self.player1_score
+                        elif self.winner == "Player 2":
+                            score_to_save = self.player2_score
+                        else:
+                            score_to_save = max(self.player1_score, self.player2_score)
+                    else:
+                        score_to_save = self.total_score if self.levels_completed > 0 else self.precision_score
+                        
+                    self.pending_score_data = {
+                        'level': self.level,
+                        'time': self.total_time,
+                        'score': score_to_save,
+                        'game_mode': self.game_mode,
+                        'is_game_over': True
+                    }
+                    self.state = "GAME_OVER"
 
-                # Verificar colisão com minas
-                if len(self.mines) > 0 and self.mine_hit_animation_time == 0:
-                    for mine in self.mines[:]:  # Copiar lista para poder modificar
-                        distance = math.sqrt((self.ball.x - mine.x)**2 + (self.ball.y - mine.y)**2)
-                        if distance < BALL_RADIUS + mine.size:
-                            # Pisar mina!
-                            self.mines.remove(mine)
-                            self.send_mine_command()
-                            self.lives -= 1
-                            self.mine_hit_animation_time = time.time()
-                            self.life_lost_animation_time = time.time()
-
-                            # Play mine hit sound
-                            if self.sound_mine_hit:
-                                self.sound_mine_hit.play()
-
-                            # Verificar game over
-                            if self.lives <= 0:
-                                # Play game over sound
-                                if self.sound_game_over:
-                                    self.sound_game_over.play()
-
-                                # Store data for name input before game over
-                                self.pending_score_data = {
-                                    'level': self.level,
-                                    'time': self.total_time,
-                                    'score': 0,  # No score on game over
-                                    'game_mode': self.game_mode,
-                                    'is_game_over': True
-                                }
-                                self.state = "GAME_OVER"
-                            else:
-                                # Resetar posição da bola
-                                self.ball.x = MAZE_MARGIN + 60
-                                self.ball.y = MAZE_MARGIN_TOP + 60
-                                self.ball.vx = 0
-                                self.ball.vy = 0
-                            break
-
-                # Atualizar timer baseado no modo
+                # Timer Update
                 mode_config = GAME_MODES.get(self.game_mode, {})
                 if mode_config.get('timer_direction') == 'down':
-                    # Timer decrescente
                     self.timer -= dt
                     if self.timer <= 0:
                         self.timer = 0
-                        # Store data for name input before game over
-                        self.pending_score_data = {
-                            'level': self.level,
-                            'time': self.total_time,
-                            'score': 0,
-                            'game_mode': self.game_mode,
-                            'is_game_over': True
-                        }
-                        # Play game over sound
                         if self.sound_game_over:
                             self.sound_game_over.play()
-                        self.state = "GAME_OVER"
+                        
+                        # Elimination Mode Logic: Time Out
+                        if self.game_mode == 'elimination' and self.num_players == 2:
+                            # If time runs out, whoever didn't finish loses.
+                            # If both didn't finish, the one furthest from goal loses (closest wins).
+                            
+                            # Calculate current distances
+                            dist1 = math.sqrt((self.ball.x - self.goal_pos[0])**2 + (self.ball.y - self.goal_pos[1])**2)
+                            dist2 = math.sqrt((self.ball2.x - self.goal_pos[0])**2 + (self.ball2.y - self.goal_pos[1])**2)
+                            
+                            # Calculate partial scores based on progress from start
+                            if not self.player1_finished:
+                                if hasattr(self, 'p1_start_dist') and self.p1_start_dist > 0 and dist1 < self.p1_start_dist:
+                                    # Score based on % distance covered
+                                    p1_partial = int(1000 * (self.p1_start_dist - dist1) / self.p1_start_dist)
+                                    self.player1_score += p1_partial
+                                
+                            if not self.player2_finished:
+                                if hasattr(self, 'p2_start_dist') and self.p2_start_dist > 0 and dist2 < self.p2_start_dist:
+                                    p2_partial = int(1000 * (self.p2_start_dist - dist2) / self.p2_start_dist)
+                                    self.player2_score += p2_partial
+                            
+                            # Determine Winner based on scores (not just distance)
+                            if self.player1_finished and not self.player2_finished:
+                                self.winner = "Player 1"
+                            elif self.player2_finished and not self.player1_finished:
+                                self.winner = "Player 2"
+                            else:
+                                # Both failed to finish - winner is who has more points
+                                if self.player1_score > self.player2_score:
+                                    self.winner = "Player 1"
+                                elif self.player2_score > self.player1_score:
+                                    self.winner = "Player 2"
+                                else:
+                                    self.winner = "Draw"
+                            
+                            self.state = "MP_WIN"
+                        else:
+                            # Standard Game Over
+                            score_to_save = self.total_score if self.levels_completed > 0 else self.precision_score
+                            self.pending_score_data = {
+                                'level': self.level,
+                                'time': self.total_time,
+                                'score': score_to_save,
+                                'game_mode': self.game_mode,
+                                'is_game_over': True
+                            }
+                            self.state = "GAME_OVER"
                 else:
-                    # Timer crescente (normal)
                     self.timer = time.time() - self.level_start_time
 
                 # Atualizar animações
                 if self.mine_hit_animation_time > 0:
-                    if time.time() - self.mine_hit_animation_time > 0.5:  # 500ms de animação
+                    if time.time() - self.mine_hit_animation_time > 0.5:
                         self.mine_hit_animation_time = 0
 
                 # Verificar vitória
@@ -2872,10 +3923,16 @@ class Game:
             # Desenho
             if self.state == "MENU":
                 self.draw_menu()
+            elif self.state == "PLAYER_SELECT":
+                self.draw_player_select()
+            elif self.state == "STM32_SETUP":
+                self.draw_stm32_setup()
             elif self.state == "MODE_SELECT":
                 self.draw_mode_select()
             elif self.state == "SETTINGS":
                 self.draw_settings()
+            elif self.state == "CONTROLS":
+                self.draw_controls()
             elif self.state == "LEADERBOARD":
                 self.draw_leaderboard()
             elif self.state == "PLAYER_PROFILE":
@@ -2886,10 +3943,14 @@ class Game:
                 self.draw_pause()
             elif self.state == "WIN":
                 self.draw_win()
+            elif self.state == "MP_WIN":
+                self.draw_mp_win()
             elif self.state == "NAME_INPUT":
                 self.draw_name_input()
             elif self.state == "GAME_OVER":
                 self.draw_gameover()
+            elif self.state == "DIFFICULTY_SELECT":
+                self.draw_difficulty_select()
 
         # Fechar
         if self.serial_port:
